@@ -1,0 +1,105 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", sans-serif;
+  color: #0f172a;
+  background:
+    radial-gradient(circle at 85% 8%, rgba(56, 189, 248, 0.12), transparent 32%),
+    radial-gradient(circle at 12% 18%, rgba(37, 99, 235, 0.12), transparent 30%),
+    #f8fbff;
+}
+
+.page-shell {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 48px 20px 60px;
+}
+
+.page-card {
+  background: #fff;
+  border: 1px solid #e3eaf7;
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.page-tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #1d4ed8;
+  background: #e6f0ff;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 30px;
+  line-height: 1.25;
+}
+
+h2 {
+  margin: 26px 0 8px;
+  font-size: 20px;
+}
+
+p,
+li {
+  color: #334155;
+  line-height: 1.7;
+}
+
+ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.meta {
+  margin-top: 14px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.contact-box {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.contact-box a {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.bottom-link {
+  margin-top: 24px;
+}
+
+.bottom-link a {
+  color: #1e40af;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    padding: 28px 14px 40px;
+  }
+
+  .page-card {
+    padding: 20px 16px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+}

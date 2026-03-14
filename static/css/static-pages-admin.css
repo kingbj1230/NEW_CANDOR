@@ -1,0 +1,109 @@
+.spa-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.spa-hero h1 {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.spa-hero p {
+  margin: 0.5rem 0 0;
+  color: #64748b;
+}
+
+.spa-toolbar {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fbff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.spa-select-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.spa-select-form label {
+  display: block;
+  width: 100%;
+  margin: 0;
+  font-size: 0.88rem;
+  color: #475569;
+}
+
+.spa-select-form select {
+  min-width: 220px;
+  height: 36px;
+  padding: 0 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.spa-editor-form {
+  margin-top: 1rem;
+}
+
+.spa-editor-form label {
+  margin-bottom: 0.45rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.spa-editor-form textarea {
+  width: 100%;
+  min-height: 62vh;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.spa-actions {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.spa-actions p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .spa-toolbar {
+    align-items: stretch;
+  }
+
+  .spa-select-form {
+    width: 100%;
+  }
+
+  .spa-select-form select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .spa-editor-form textarea {
+    min-height: 54vh;
+  }
+}

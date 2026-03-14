@@ -1,0 +1,166 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}마이페이지{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mypage.css', v='20260313b') }}">
+{% endblock %}
+
+{% block main %}
+<section class="mypage-shell">
+    <header class="mypage-hero">
+        <div>
+            <h1>마이페이지</h1>
+            <p>내 프로필과 내가 등록한 후보·공약을 한 번에 관리할 수 있습니다.</p>
+        </div>
+        <div class="mypage-hero-actions">
+            <a href="/candidate" class="mypage-link-btn">후보자 등록</a>
+            <a href="/pledge" class="mypage-link-btn">공약 등록</a>
+            {% if is_admin_user %}
+            <a href="/admin/static-pages" class="mypage-link-btn">정적 페이지 수정</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <section class="mypage-summary-grid">
+        <article class="summary-card">
+            <h2>내 후보자</h2>
+            <p id="summaryCandidateCount">0</p>
+        </article>
+        <article class="summary-card">
+            <h2>내 공약</h2>
+            <p id="summaryPledgeCount">0</p>
+        </article>
+        <article class="summary-card">
+            <h2>권한</h2>
+            <p id="summaryRole">-</p>
+        </article>
+        <article id="summaryReportCard" class="summary-card" hidden>
+            <h2>신고함</h2>
+            <p id="summaryReportCount">0</p>
+        </article>
+    </section>
+
+    <div id="mypageMessage" class="mypage-message" aria-live="polite"></div>
+
+    <section class="mypage-tabs">
+        <button type="button" class="mypage-tab-btn is-active" data-mypage-tab="profile">내 정보</button>
+        <button type="button" class="mypage-tab-btn" data-mypage-tab="candidates">내 후보자</button>
+        <button type="button" class="mypage-tab-btn" data-mypage-tab="pledges">내 공약</button>
+        <button type="button" id="adminReportTabBtn" class="mypage-tab-btn" data-mypage-tab="reports" hidden>의견/신고함</button>
+    </section>
+
+    <section id="mypagePanelProfile" class="mypage-panel is-active">
+        <article class="mypage-card">
+            <div class="panel-head">
+                <h2>프로필</h2>
+            </div>
+            <dl class="profile-list">
+                <div>
+                    <dt>닉네임</dt>
+                    <dd id="profileNickname">-</dd>
+                </div>
+                <div>
+                    <dt>이메일</dt>
+                    <dd id="profileEmail">-</dd>
+                </div>
+                <div>
+                    <dt>권한</dt>
+                    <dd><span id="profileRole" class="role-badge">-</span></dd>
+                </div>
+                <div>
+                    <dt>상태</dt>
+                    <dd id="profileStatus">-</dd>
+                </div>
+                <div>
+                    <dt>가입일</dt>
+                    <dd id="profileCreatedAt">-</dd>
+                </div>
+                <div>
+                    <dt>평판 점수</dt>
+                    <dd id="profileReputation">-</dd>
+                </div>
+            </dl>
+        </article>
+    </section>
+
+    <section id="mypagePanelCandidates" class="mypage-panel">
+        <article class="mypage-card">
+            <div class="panel-head">
+                <h2>내가 등록한 후보자</h2>
+                <span id="myCandidateCount">0건</span>
+            </div>
+            <ul id="myCandidateList" class="item-list"></ul>
+        </article>
+    </section>
+
+    <section id="mypagePanelPledges" class="mypage-panel">
+        <article class="mypage-card">
+            <div class="panel-head">
+                <h2>내가 등록한 공약</h2>
+                <span id="myPledgeCount">0건</span>
+            </div>
+            <ul id="myPledgeList" class="item-list"></ul>
+        </article>
+    </section>
+
+    <section id="mypagePanelReports" class="mypage-panel" hidden>
+        <article class="mypage-card">
+            <div class="panel-head">
+                <h2>의견/신고함 (관리자)</h2>
+                <span id="adminReportCount">0건</span>
+            </div>
+            <ul id="adminReportList" class="item-list"></ul>
+        </article>
+    </section>
+</section>
+
+<section id="candidateEditModal" class="mypage-modal" hidden>
+    <div class="mypage-modal-backdrop" data-modal-close></div>
+    <div class="mypage-modal-dialog">
+        <form id="candidateEditForm" class="modal-form">
+            <h3>후보자 수정</h3>
+            <input type="hidden" id="candidateEditId">
+            <label for="candidateEditName">이름</label>
+            <input id="candidateEditName" type="text" required>
+            <label for="candidateEditImage">이미지 URL</label>
+            <input id="candidateEditImage" type="url" placeholder="https://...">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-light" data-modal-close>닫기</button>
+                <button type="submit" class="btn btn-primary">저장</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section id="pledgeEditModal" class="mypage-modal" hidden>
+    <div class="mypage-modal-backdrop" data-modal-close></div>
+    <div class="mypage-modal-dialog">
+        <form id="pledgeEditForm" class="modal-form">
+            <h3>공약 수정</h3>
+            <input type="hidden" id="pledgeEditId">
+            <label for="pledgeEditCandidateElectionId">후보자-선거 매칭 ID</label>
+            <input id="pledgeEditCandidateElectionId" type="text" readonly>
+            <label for="pledgeEditSortOrder">정렬 순서</label>
+            <input id="pledgeEditSortOrder" type="number" min="1" step="1" required>
+            <label for="pledgeEditTitle">제목</label>
+            <input id="pledgeEditTitle" type="text" required>
+            <label for="pledgeEditCategory">카테고리</label>
+            <input id="pledgeEditCategory" type="text" required>
+            <label for="pledgeEditStatus">상태</label>
+            <select id="pledgeEditStatus">
+                <option value="active">active</option>
+                <option value="hidden">hidden</option>
+            </select>
+            <label for="pledgeEditRawText">원문</label>
+            <textarea id="pledgeEditRawText" rows="8" required></textarea>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-light" data-modal-close>닫기</button>
+                <button type="submit" class="btn btn-primary">저장</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/mypage.js', v='20260313b') }}"></script>
+{% endblock %}

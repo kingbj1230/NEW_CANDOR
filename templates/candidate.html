@@ -1,0 +1,88 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}후보자 등록{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css', v='20260313r2') }}">
+{% endblock %}
+
+{% block main %}
+<section class="candidate-shell">
+  <header class="candidate-hero">
+    <span class="hero-kicker">관리자 도구</span>
+    <h1>후보자 등록</h1>
+    <p>후보자 등록과 당선 경력 입력을 분리해 관리할 수 있습니다.</p>
+    <a class="hero-link" href="/election">선거 등록으로 이동</a>
+  </header>
+
+  <div id="candidateMessage" class="candidate-message" aria-live="polite"></div>
+
+  <div class="candidate-switch" role="tablist" aria-label="후보자 관리 유형">
+    <button type="button" class="switch-btn active" data-admin-tab-target="candidate" aria-selected="true">
+      후보자 등록
+    </button>
+    <button type="button" class="switch-btn" data-admin-tab-target="terms" aria-selected="false">
+      당선 경력 등록
+    </button>
+  </div>
+
+  <section class="admin-panel is-active" data-admin-tab-panel="candidate">
+    <div class="candidate-grid">
+      <form id="candidateForm" class="candidate-form" enctype="multipart/form-data">
+        <h2>신규 후보자</h2>
+
+        <label for="candidateName">이름</label>
+        <input id="candidateName" name="name" type="text" required placeholder="예: 홍길동">
+
+        <label for="candidateImage">후보자 이미지</label>
+        <input id="candidateImage" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,.gif" required>
+
+        <button id="saveCandidateBtn" type="submit">후보자 저장</button>
+      </form>
+
+      <section class="candidate-list-wrap">
+        <div class="candidate-list-header">
+          <h2>등록된 후보자</h2>
+          <button id="refreshCandidatesBtn" type="button">새로고침</button>
+        </div>
+        <div id="candidateList" class="candidate-list"></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="admin-panel" data-admin-tab-panel="terms" hidden>
+    <div class="candidate-grid">
+      <form id="termForm" class="candidate-form">
+        <h2>당선 경력 등록</h2>
+
+        <p class="form-help">당선된 후보/선거 조합만 선택할 수 있습니다.</p>
+        <p class="form-help">선택 시 직책/임기 기간이 자동으로 채워집니다. 필요한 경우 직접 수정한 뒤 저장하세요.</p>
+
+        <label for="termWinnerPair">당선 이력</label>
+        <select id="termWinnerPair" name="winner_pair" required></select>
+
+        <label for="termPosition">직책</label>
+        <input id="termPosition" name="position" type="text" required placeholder="예: 대통령, 국회의원">
+
+        <label for="termStart">임기 시작일</label>
+        <input id="termStart" name="term_start" type="date" required>
+
+        <label for="termEnd">임기 종료일</label>
+        <input id="termEnd" name="term_end" type="date" placeholder="진행 중이면 비워도 됩니다.">
+
+        <button id="saveTermBtn" type="submit">경력 저장</button>
+      </form>
+
+      <section class="candidate-list-wrap">
+        <div class="candidate-list-header">
+          <h2>등록된 당선 경력</h2>
+          <button id="refreshTermsBtn" type="button">새로고침</button>
+        </div>
+        <div id="termList" class="candidate-list"></div>
+      </section>
+    </div>
+  </section>
+</section>
+
+<script src="{{ url_for('static', filename='js/candidate-admin.js', v='20260313r2') }}"></script>
+{% endblock %}

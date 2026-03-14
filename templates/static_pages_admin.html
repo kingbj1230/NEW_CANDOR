@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+
+{% block title %}정적 페이지 수정{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/static-pages-admin.css', v='20260313a') }}">
+{% endblock %}
+
+{% block main %}
+<section class="spa-shell">
+    <div class="spa-hero">
+        <h1>정적 페이지 수정</h1>
+        <p>소개/개인정보처리방침/문의 페이지를 HTML로 바로 수정할 수 있습니다.</p>
+    </div>
+
+    <div class="spa-toolbar">
+        <form method="get" action="/admin/static-pages" class="spa-select-form">
+            <label for="pageSelect">페이지 선택</label>
+            <select id="pageSelect" name="page">
+                {% for key, cfg in page_options.items() %}
+                <option value="{{ key }}" {% if key == page_key %}selected{% endif %}>{{ cfg.label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-outline-primary btn-sm">불러오기</button>
+        </form>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('static', filename='pages/' ~ page_options[page_key].filename) }}" target="_blank" rel="noopener">
+            현재 페이지 보기
+        </a>
+    </div>
+
+    {% if save_message %}
+    <div class="alert alert-success" role="alert">{{ save_message }}</div>
+    {% endif %}
+    {% if save_error %}
+    <div class="alert alert-danger" role="alert">{{ save_error }}</div>
+    {% endif %}
+
+    <form method="post" action="/admin/static-pages" class="spa-editor-form">
+        <input type="hidden" name="page" value="{{ page_key }}">
+        <label for="contentEditor">{{ page_options[page_key].label }} HTML</label>
+        <textarea id="contentEditor" name="content" spellcheck="false">{{ content }}</textarea>
+        <div class="spa-actions">
+            <button type="submit" class="btn btn-primary">저장하기</button>
+            <p>저장 후 해당 정적 페이지를 새로고침하면 바로 반영됩니다.</p>
+        </div>
+    </form>
+</section>
+{% endblock %}

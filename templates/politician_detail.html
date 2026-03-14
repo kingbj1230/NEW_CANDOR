@@ -1,0 +1,211 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}정치인 상세페이지{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/browse.css', v='20260313r6') }}">
+{% endblock %}
+
+{% block main %}
+<section class="browse-shell politician-page">
+    <div class="browse-hero">
+        <h1>정치인 상세페이지</h1>
+        <p>선거별 공약 구조와 이행률을 확인하고, 바로 평가를 입력할 수 있습니다.</p>
+    </div>
+
+    <div id="browseMessage" class="browse-message" aria-live="polite"></div>
+
+    <div class="mb-3 d-flex gap-2 align-items-center">
+        <a class="btn btn-outline-secondary btn-sm" href="/politicians">목록으로 돌아가기</a>
+        <span id="adminBadge" class="admin-badge" hidden>관리자 모드</span>
+    </div>
+
+    <section id="politicianDetailLoading" class="detail-loading-card" role="status" aria-live="polite">
+        <div class="detail-loading-spinner" aria-hidden="true"></div>
+        <p class="detail-loading-title">정치인 상세페이지를 불러오는 중입니다.</p>
+        <p class="detail-loading-sub">선거별 공약과 이행 정보를 준비하고 있습니다.</p>
+    </section>
+
+    <section id="detailGuideCard" class="progress-guide-card" hidden>
+        <div class="progress-guide-main">
+            <h3>이행률 입력이 필요하신가요?</h3>
+            <p>공약 카드의 각 항목 오른쪽 <strong>이행률 입력</strong> 버튼을 누르면 즉시 평가창이 열립니다.</p>
+            <small id="progressTargetHint">평가 가능한 항목을 불러오는 중입니다.</small>
+        </div>
+        <button id="openFirstProgressBtn" type="button" class="progress-guide-btn">첫 평가 입력하기</button>
+    </section>
+
+    <section id="politicianDetailPanel" class="politician-detail" hidden>
+        <article id="politicianProfile" class="politician-profile"></article>
+
+        <div class="politician-pledges-head">
+            <h3>선거별 공약</h3>
+            <span id="politicianPledgeCount">0건</span>
+        </div>
+        <div id="politicianPledgeList" class="promise-list"></div>
+    </section>
+
+    <div id="progressEditModal" class="progress-edit-modal" hidden>
+        <div class="progress-edit-backdrop" data-action="close-progress-modal"></div>
+        <div class="progress-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="progressEditTitle">
+            <div class="progress-edit-head">
+                <h3 id="progressEditTitle">이행률 평가 입력</h3>
+                <button type="button" class="progress-close-btn" data-action="close-progress-modal">닫기</button>
+            </div>
+            <p id="progressEditNodePath" class="progress-node-path">대상을 선택해 주세요.</p>
+
+            <form id="progressQuickForm" class="progress-edit-form">
+                <input id="progressEditNodeId" type="hidden">
+
+                <div class="field">
+                    <label for="progressEditRate">이행 점수</label>
+                    <select id="progressEditRate" required>
+                        <option value="5">5점 · 공약이 이미 완료된 사업</option>
+                        <option value="4.5">4.5점 · 재임기간을 조금 넘겨 완료가 확실시되는 사업</option>
+                        <option value="4">4점 · 예산/일정이 확정되어 진행 중인 사업</option>
+                        <option value="3.5">3.5점 · 일부만 완료되었거나 축소·변경된 사업</option>
+                        <option value="3">3점 · 예산/일정이 있으나 계획이 축소·변경된 사업</option>
+                        <option value="2.5">2.5점 · 예비타당성 조사 등 준비단계 사업</option>
+                        <option value="2">2점 · 논의·협의만 진행된 사업</option>
+                        <option value="1.5">1.5점 · 계획만 있고 추진된 사항이 거의 없는 사업</option>
+                        <option value="1">1점 · 간접 참여 수준 또는 상징적 진행</option>
+                        <option value="0">0점 · 착수되지 않았거나 평가 불가능한 사업</option>
+                    </select>
+                    <p id="progressEditRateGuide" class="progress-rate-guide"></p>
+                    <details class="progress-rate-criteria">
+                        <summary>평가기준 보기</summary>
+                        <div class="criteria-table-wrap">
+                            <table class="criteria-table">
+                                <thead>
+                                    <tr>
+                                        <th>점수</th>
+                                        <th>평가 기준</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td>5</td><td>공약이 이미 완료된 사업. 기한 내 완료가 확실한 사업.</td></tr>
+                                    <tr><td>4.5</td><td>아직 완료되진 않았지만 재임기간을 조금 넘겨 공약완료가 확실시되는 사업.</td></tr>
+                                    <tr><td>4</td><td>예산이 확실히 배정되고 세부 일정이 결정되어 진행 중인 사업.</td></tr>
+                                    <tr><td>3.5</td><td>공약이 축소·변경된 상태로 일부만 완료된 사업.</td></tr>
+                                    <tr><td>3</td><td>예산/일정은 있으나 계획이 축소·변경되거나 속도가 느린 사업.</td></tr>
+                                    <tr><td>2.5</td><td>예비타당성 조사 등은 진행됐으나 구체적 착수 일정이 불명확한 사업.</td></tr>
+                                    <tr><td>2</td><td>논의·협의만 이루어지고 구체적 실행이 부족한 사업.</td></tr>
+                                    <tr><td>1.5</td><td>계획만 있고 추진된 사항이 거의 없는 사업.</td></tr>
+                                    <tr><td>1</td><td>해당 인물과 직접 연관이 낮거나 상징적 수준으로 진행된 사업.</td></tr>
+                                    <tr><td>0</td><td>전혀 착수되지 않았거나 공약 사항 자체가 모호해 평가가 어려운 사업.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="field">
+                    <label for="progressEditStatus">상태</label>
+                    <select id="progressEditStatus" required>
+                        <option value="not_started">미착수</option>
+                        <option value="in_progress">진행 중</option>
+                        <option value="partially_completed">부분 완료</option>
+                        <option value="completed">완료</option>
+                        <option value="failed">실패</option>
+                        <option value="unknown">미확인</option>
+                    </select>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="progressEditEvaluator">평가 주체</label>
+                        <input id="progressEditEvaluator" type="text" placeholder="예: 시민단체">
+                    </div>
+                    <div class="field">
+                        <label for="progressEditDate">평가 기준일</label>
+                        <input id="progressEditDate" type="date" required>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="progressEditReason">이유</label>
+                    <textarea id="progressEditReason" rows="3" placeholder="평가 이유를 입력해 주세요."></textarea>
+                </div>
+
+                <div class="divider">근거 출처</div>
+
+                <div class="field">
+                    <label for="progressEditSourceTitle">출처 제목</label>
+                    <input id="progressEditSourceTitle" type="text" required placeholder="예: 2026년 정부 보도자료">
+                </div>
+
+                <div class="field">
+                    <label for="progressEditSourceUrl">출처 URL</label>
+                    <input id="progressEditSourceUrl" type="url" placeholder="https://...">
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="progressEditSourceType">출처 유형</label>
+                        <select id="progressEditSourceType">
+                            <option value="">선택 안 함</option>
+                            <option value="정부">정부</option>
+                            <option value="언론">언론</option>
+                            <option value="보고서">보고서</option>
+                            <option value="연구">연구</option>
+                            <option value="예산">예산</option>
+                            <option value="보도자료">보도자료</option>
+                            <option value="연설">연설</option>
+                            <option value="법령">법령</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="progressEditSourceDate">출처 발행일</label>
+                        <input id="progressEditSourceDate" type="date">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="progressEditSourcePublisher">발행기관</label>
+                    <input id="progressEditSourcePublisher" type="text" placeholder="예: 기획재정부">
+                </div>
+
+                <div class="field">
+                    <label for="progressEditSourceSummary">출처 요약</label>
+                    <textarea id="progressEditSourceSummary" rows="3" placeholder="핵심 요약"></textarea>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="progressEditSourceRole">출처 역할</label>
+                        <select id="progressEditSourceRole">
+                            <option value="주요근거">주요 근거</option>
+                            <option value="보조근거">보조 근거</option>
+                            <option value="반박자료">반박 자료</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="progressEditPageNo">페이지 번호</label>
+                        <input id="progressEditPageNo" type="number" min="1" placeholder="예: 12">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="progressEditQuote">인용 문장</label>
+                    <input id="progressEditQuote" type="text" placeholder="핵심 인용문">
+                </div>
+
+                <div class="field">
+                    <label for="progressEditNote">메모</label>
+                    <textarea id="progressEditNote" rows="2" placeholder="추가 메모"></textarea>
+                </div>
+
+                <div class="progress-actions">
+                    <button type="button" class="outline-btn" data-action="close-progress-modal">취소</button>
+                    <button id="progressQuickSaveBtn" type="submit">평가 저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<script>
+    window.POLITICIAN_DETAIL_ID = {{ candidate_id | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/politicianDetail.js', v='20260313r7') }}"></script>
+{% endblock %}

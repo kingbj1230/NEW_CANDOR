@@ -1,0 +1,54 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}이행현황{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/progress.css', v='20260313r2') }}">
+{% endblock %}
+
+{% block main %}
+<section class="progress-overview-shell">
+    <div class="progress-overview-hero">
+        <h1>이행현황</h1>
+    </div>
+
+    <div id="progressOverviewMessage" class="progress-overview-message" aria-live="polite"></div>
+
+    <section class="overview-controls-card">
+        <div class="overview-controls-grid">
+            <div class="field">
+                <label for="overviewElectionType">선거 유형</label>
+                <select id="overviewElectionType">
+                    <option value="">전체</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="overviewKeyword">검색</label>
+                <input id="overviewKeyword" type="text" placeholder="정치인명, 정당, 선거명 검색">
+            </div>
+            <div class="actions-inline">
+                <button id="overviewRefreshBtn" type="button">새로고침</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="overview-list-card">
+        <div class="list-head">
+            <h2>후보자별 이행현황</h2>
+            <span id="overviewCountLabel">0건</span>
+        </div>
+        <div id="overviewList" class="overview-list">
+            <article class="overview-item empty">데이터가 없습니다.</article>
+        </div>
+    </section>
+
+    <div id="progressOverviewLoading" class="progress-overview-loading" hidden>
+        <div class="progress-overview-loading-card" role="status" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <p id="progressOverviewLoadingText">이행현황을 불러오는 중입니다...</p>
+        </div>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/progress-admin.js', v='20260313r2') }}"></script>
+{% endblock %}

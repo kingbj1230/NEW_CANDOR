@@ -1,0 +1,96 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}선거 등록{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css', v='20260313r3') }}">
+{% endblock %}
+
+{% block main %}
+<section class="candidate-shell">
+  <header class="candidate-hero">
+    <span class="hero-kicker">관리자 도구</span>
+    <h1>선거 등록</h1>
+    <p>선거 메타 정보를 별도로 관리해 공약 및 후보자 정보와 구분해 운영합니다.</p>
+    <a class="hero-link" href="/candidate">후보자 등록으로 이동</a>
+  </header>
+
+  <div id="candidateMessage" class="candidate-message" aria-live="polite"></div>
+
+  <div class="candidate-switch" role="tablist" aria-label="선거 관리 유형">
+    <button type="button" class="switch-btn active" data-admin-tab-target="election" aria-selected="true">
+      선거 등록
+    </button>
+    <button type="button" class="switch-btn" data-admin-tab-target="mapping" aria-selected="false">
+      후보자 매칭
+    </button>
+  </div>
+
+  <section class="admin-panel is-active" data-admin-tab-panel="election">
+    <div class="candidate-grid election-grid">
+      <form id="electionForm" class="candidate-form">
+        <h2>신규 선거</h2>
+
+        <label for="electionType">선거 유형</label>
+        <input id="electionType" name="election_type" type="text" required placeholder="예: 대통령">
+
+        <label for="electionTitle">선거 이름</label>
+        <input id="electionTitle" name="title" type="text" required placeholder="예: 제21대 대통령 선거">
+
+        <label for="electionDate">선거 일자</label>
+        <input id="electionDate" name="election_date" type="date" required>
+
+        <button id="saveElectionBtn" type="submit">선거 저장</button>
+      </form>
+
+      <section class="candidate-list-wrap">
+        <div class="candidate-list-header">
+          <h2>등록된 선거</h2>
+          <button id="refreshElectionsBtn" type="button">새로고침</button>
+        </div>
+        <div id="electionList" class="candidate-list"></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="admin-panel" data-admin-tab-panel="mapping" hidden>
+    <div class="candidate-grid">
+      <form id="candidateElectionForm" class="candidate-form">
+        <h2>선거별 후보 등록</h2>
+
+        <label for="linkCandidateId">후보자</label>
+        <select id="linkCandidateId" name="candidate_id" required></select>
+
+        <label for="linkElectionId">선거</label>
+        <select id="linkElectionId" name="election_id" required></select>
+
+        <label for="linkParty">소속 정당</label>
+        <input id="linkParty" name="party" type="text" required placeholder="예: 더미정당">
+
+        <label for="linkCandidateNumber">기호</label>
+        <input id="linkCandidateNumber" name="candidate_number" type="number" min="1" required placeholder="예: 1">
+
+        <label for="linkResult">결과</label>
+        <select id="linkResult" name="result" required>
+          <option value="당선">당선</option>
+          <option value="낙선">낙선</option>
+          <option value="사퇴">사퇴</option>
+          <option value="기타">기타</option>
+        </select>
+
+        <button id="saveCandidateElectionBtn" type="submit">선거 후보 저장</button>
+      </form>
+
+      <section class="candidate-list-wrap">
+        <div class="candidate-list-header">
+          <h2>등록된 선거 후보</h2>
+          <button id="refreshCandidateElectionsBtn" type="button">새로고침</button>
+        </div>
+        <div id="candidateElectionList" class="candidate-list"></div>
+      </section>
+    </div>
+  </section>
+</section>
+
+<script src="{{ url_for('static', filename='js/election-admin.js', v='20260313r3') }}"></script>
+{% endblock %}

@@ -1,0 +1,371 @@
+﻿.mypage-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.mypage-hero {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 1.1rem 1.2rem;
+  border-radius: 1rem;
+  border: 1px solid #dbe8ff;
+  background:
+    radial-gradient(circle at 15% 30%, rgba(59, 130, 246, 0.14), transparent 35%),
+    #f7faff;
+}
+
+.mypage-hero h1 {
+  margin: 0 0 0.3rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.mypage-hero p {
+  margin: 0;
+  color: #475569;
+}
+
+.mypage-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.mypage-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid #c8dbff;
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  text-decoration: none;
+  font-size: 0.87rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #fff;
+}
+
+.mypage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.summary-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  background: #fff;
+}
+
+.summary-card h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.summary-card p {
+  margin: 0.25rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.mypage-message {
+  padding: 0.72rem 0.9rem;
+  border-radius: 0.7rem;
+  font-size: 0.92rem;
+}
+
+.mypage-message.info {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.mypage-message.success {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.mypage-message.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.mypage-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.mypage-tab-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.mypage-tab-btn.is-active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.mypage-panel {
+  display: none;
+}
+
+.mypage-panel.is-active {
+  display: block;
+}
+
+.mypage-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.8rem;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 1.08rem;
+  color: #0f172a;
+}
+
+.panel-head span {
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.profile-list {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.profile-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border-bottom: 1px dashed #e2e8f0;
+  padding-bottom: 0.42rem;
+}
+
+.profile-list dt {
+  color: #475569;
+  font-weight: 700;
+}
+
+.profile-list dd {
+  margin: 0;
+  color: #0f172a;
+  text-align: right;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.role-badge.admin {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.item-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.8rem;
+  padding: 0.7rem;
+  background: #fff;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.item-main {
+  min-width: 0;
+}
+
+.item-title {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.86rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.report-item .item-row {
+  align-items: flex-start;
+}
+
+.mypage-report-link {
+  display: inline-flex;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.report-controls {
+  margin-top: 0.65rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.report-controls label {
+  display: grid;
+  gap: 0.24rem;
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 700;
+}
+
+.mypage-report-status,
+.mypage-report-note {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.86rem;
+  color: #0f172a;
+  background: #fff;
+}
+
+.mypage-action-btn,
+.mypage-action-link {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 9px;
+  padding: 0.34rem 0.58rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.mypage-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+}
+
+.mypage-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.mypage-modal-dialog {
+  position: relative;
+  width: min(760px, calc(100% - 28px));
+  margin: 6vh auto 0;
+  max-height: 88vh;
+  overflow: auto;
+  border-radius: 0.95rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.24);
+}
+
+.modal-form {
+  display: grid;
+  gap: 0.48rem;
+  padding: 1rem;
+}
+
+.modal-form h3 {
+  margin: 0 0 0.4rem;
+  color: #0f172a;
+  font-size: 1.1rem;
+}
+
+.modal-form label {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 700;
+}
+
+.modal-form input,
+.modal-form select,
+.modal-form textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.58rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+@media (max-width: 1024px) {
+  .mypage-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .item-row {
+    flex-direction: column;
+  }
+
+  .item-actions {
+    justify-content: flex-start;
+  }
+
+  .mypage-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

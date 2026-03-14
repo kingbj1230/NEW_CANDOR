@@ -1,0 +1,176 @@
+﻿{% extends "layout.html" %}
+
+{% block title %}&#44277;&#50557; &#46321;&#47197;{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pledge.css', v='20260313r3') }}">
+{% endblock %}
+
+{% block main %}
+<section class="pledge-shell">
+    <div class="pledge-hero">
+        <h1>&#44277;&#50557; &#46321;&#47197;</h1>
+        <p>탭 형태로 공약을 등록할 수 있습니다.</p>
+    </div>
+
+    <div id="pledgeMessage" class="pledge-message" aria-live="polite"></div>
+    <div class="pledge-top-tabs">
+        <div class="editor-mode-switch" role="tablist" aria-label="공약 작성 방식">
+            <button type="button" class="editor-mode-tab active" data-editor-mode="paste" aria-selected="true">구조형 입력</button>
+            <button type="button" class="editor-mode-tab" data-editor-mode="guided" aria-selected="false">자유 작성</button>
+        </div>
+    </div>
+
+    <div class="pledge-grid">
+        <form id="pledgeForm" class="pledge-form pledge-editor-form">
+            <div class="editor-form-head">
+                <div>
+                    <p class="builder-kicker">&#44277;&#50557; &#51089;&#49457;</p>
+                    <h2>공약 등록</h2>
+                </div>
+            </div>
+
+            <div class="pledge-meta-grid">
+                <div>
+                    <label for="candidateElectionId">&#54980;&#48372;&#51088; &#47588;&#52845;</label>
+                    <select id="candidateElectionId" required>
+                        <option value="">&#54980;&#48372;&#51088;-&#49440;&#44144;&#47484; &#49440;&#53469;&#54616;&#49464;&#50836;</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="pledgeTitle">&#44277;&#50557; &#51228;&#47785;</label>
+                    <input id="pledgeTitle" type="text" required placeholder="&#50696;: &#52397;&#45380; &#51452;&#44144; &#51648;&#50896; &#54869;&#45824;">
+                </div>
+                <div>
+                    <label for="pledgeCategory">&#52852;&#53580;&#44256;&#47532;</label>
+                    <input id="pledgeCategory" type="text" required placeholder="&#50696;: &#44221;&#51228;, &#48373;&#51648;, &#44368;&#50977;, &#44368;&#53685;">
+                </div>
+                <div>
+                    <label for="pledgeSortOrder">&#44277;&#50557; &#51221;&#47148; &#49692;&#49436;</label>
+                    <input id="pledgeSortOrder" type="number" min="1" placeholder="&#48708;&#50864;&#47732; &#51088;&#46041; &#48176;&#51221;">
+                </div>
+            </div>
+
+            <section class="editor-panel admin-panel is-active" data-editor-panel="paste">
+                <textarea id="pledgeRawTextPlain" hidden></textarea>
+
+                <div class="blog-builder-grid">
+                    <article class="blog-compose-card">
+                        <h3>구조 추가</h3>
+                        <div class="blog-unified-form">
+                            <div class="blog-field">
+                                <label for="blogNodeType">유형</label>
+                                <select id="blogNodeType">
+                                    <option value="goal">대항목</option>
+                                    <option value="promise">중항목</option>
+                                    <option value="item">세부항목</option>
+                                </select>
+                            </div>
+                            <div id="blogGoalTypeField" class="blog-field">
+                                <label for="blogGoalType">대항목 구분</label>
+                                <select id="blogGoalType">
+                                    <option value="목표">목표</option>
+                                    <option value="이행 방법">이행 방법</option>
+                                    <option value="이행기간">이행기간</option>
+                                    <option value="재원조달방안">재원조달방안</option>
+                                </select>
+                            </div>
+                            <div id="blogParentGoalField" class="blog-field" hidden>
+                                <label for="blogParentGoalSelect">상위 대항목</label>
+                                <select id="blogParentGoalSelect">
+                                    <option value="">먼저 대항목을 등록해 주세요</option>
+                                </select>
+                            </div>
+                            <div id="blogParentPromiseField" class="blog-field" hidden>
+                                <label for="blogParentPromiseSelect">상위 중항목</label>
+                                <select id="blogParentPromiseSelect">
+                                    <option value="">먼저 중항목을 등록해 주세요</option>
+                                </select>
+                            </div>
+                            <div id="blogNodeTextField" class="blog-field blog-field-grow" hidden>
+                                <label for="blogNodeText">내용</label>
+                                <input id="blogNodeText" type="text" placeholder="내용을 입력하세요">
+                            </div>
+                            <button id="addBlogNodeBtn" type="button">추가</button>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="blog-tree-card">
+                    <div class="editor-textarea-head">
+                        <label>현재 작성 구조</label>
+                    </div>
+                    <div id="blogStructureTree" class="blog-structure-tree"></div>
+                </div>
+            </section>
+
+            <section class="editor-panel admin-panel" data-editor-panel="guided" hidden>
+                <div class="editor-workspace">
+                    <div class="editor-toolbar-card">
+                        <div id="editorToolbar" class="editor-toolbar">
+                            <button type="button" class="editor-tool goal" data-goal-menu-toggle="true" aria-haspopup="true" aria-expanded="false">
+                                <span class="tool-symbol">&#9633;</span>
+                                <span class="tool-copy">
+                                    <strong>목 표</strong>
+                                </span>
+                            </button>
+                            <button type="button" class="editor-tool promise" data-insert-token="&#9675; " data-insert-mode="line">
+                                <span class="tool-symbol">&#9675;</span>
+                                <span class="tool-copy">
+                                    <strong>&#49464;&#48512; &#44277;&#50557;</strong>
+                                </span>
+                            </button>
+                            <button type="button" class="editor-tool item" data-insert-token="- " data-insert-mode="line">
+                                <span class="tool-symbol">-</span>
+                                <span class="tool-copy">
+                                    <strong>&#49892;&#54665; &#54637;&#47785;</strong>
+                                </span>
+                            </button>
+                        </div>
+                        <div id="goalOptionMenu" class="goal-option-menu" hidden>
+                            <button type="button" class="goal-option-btn" data-goal-option="목 표">목 표</button>
+                            <button type="button" class="goal-option-btn" data-goal-option="이행 방법">이행 방법</button>
+                            <button type="button" class="goal-option-btn" data-goal-option="이행기간">이행기간</button>
+                            <button type="button" class="goal-option-btn" data-goal-option="재원조달방안">재원조달방안</button>
+                            <button type="button" class="goal-option-btn" data-goal-option="기타">기타 (직접 입력)</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="editorValidationMessage" class="editor-validation-message" hidden></div>
+                <div class="editor-textarea-wrap">
+                    <div class="editor-textarea-head">
+                        <label for="pledgeRawTextGuided">&#44277;&#50557; &#48376;&#47928;</label>
+                    </div>
+                    <textarea id="pledgeRawTextGuided" rows="18" placeholder="&#50696;&#49884;&#10;&#10;&#9633; &#52397;&#45380; &#51452;&#44144; &#50504;&#51221;&#51012; &#50948;&#54620; &#51228;&#46020; &#44060;&#54200;&#10;&#10;&#9675; &#51204;&#49464;&#44552; &#44552;&#50997; &#51648;&#50896; &#54869;&#45824;&#10;- &#52397;&#45380; &#51204;&#49464;&#51088;&#44552; &#51648;&#50896; &#54620;&#46020; &#49345;&#54693;&#10;- &#51109;&#44592; &#44256;&#51221;&#44552;&#47532; &#49345;&#54408; &#46020;&#51077;&#10;&#10;&#9675; &#44277;&#44277;&#51076;&#45824; &#44277;&#44553; &#54869;&#45824;&#10;- &#50669;&#49464;&#44428; &#44277;&#44553; &#47932;&#47049; &#54869;&#45824;&#10;- &#49888;&#54844;&#48512;&#48512; &#50864;&#49440; &#48176;&#51221; &#44053;&#54868;"></textarea>
+                </div>
+            </section>
+
+            <section class="pledge-source-card">
+                <div class="pledge-source-head">
+                    <div>
+                        <p class="source-kicker">공약 출처</p>
+                        <h3>공약 출처 남기기</h3>
+                    </div>
+                    <button id="addPledgeSourceBtn" type="button" class="source-add-btn">출처 추가</button>
+                </div>
+                <p class="source-help">공약 저장 전 최소 1개 이상의 출처를 등록해야 하며, 저장 직후 공약 노드와 자동으로 연결됩니다.</p>
+                <div id="pledgeSourceList" class="pledge-source-list"></div>
+            </section>
+
+            <div class="pledge-form-actions">
+                <button id="savePledgeBtn" type="submit">&#44277;&#50557; &#51200;&#51109;</button>
+            </div>
+        </form>
+
+    </div>
+
+    <div id="pledgeLoading" class="pledge-loading" hidden>
+        <div class="pledge-loading-card" role="status" aria-live="polite">
+            <div class="pledge-spinner" aria-hidden="true"></div>
+            <p id="pledgeLoadingText">&#52376;&#47532; &#51473;&#51077;&#45768;&#45796;. &#51104;&#49884;&#47564; &#44592;&#45796;&#47140; &#51452;&#49464;&#50836;...</p>
+        </div>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260313r3') }}"></script>
+{% endblock %}

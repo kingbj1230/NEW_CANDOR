@@ -1,0 +1,152 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>공약 트래커 {% block title %}{% endblock %}</title>
+    <meta name="description" content="정치 공약과 이행 현황을 투명하게 확인하는 서비스입니다.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css', v='20260313r7') }}">
+    {% block head %}{% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light app-nav">
+        <div class="container app-nav-shell">
+            <a class="navbar-brand app-brand" href="/">공약 트래커</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbar">
+                {% set current_path = request.path %}
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 app-nav-primary">
+                    <li class="nav-item">
+                        <a class="nav-link {% if current_path.startswith('/promises') %}active{% endif %}" href="/promises">공약 살펴보기</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if current_path.startswith('/politicians') %}active{% endif %}" href="/politicians">정치인</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if current_path.startswith('/progress') %}active{% endif %}" href="/progress">이행현황</a>
+                    </li>
+                    {% if session.get("user_id") %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if current_path in ['/candidate', '/election', '/pledge'] or current_path.startswith('/admin/static-pages') %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            등록
+                        </a>
+                        <ul class="dropdown-menu app-nav-menu">
+                            <li><h6 class="dropdown-header">등록 메뉴</h6></li>
+                            <li><a class="dropdown-item" href="/candidate">후보자 등록</a></li>
+                            <li><a class="dropdown-item" href="/election">선거 등록</a></li>
+                            <li><a class="dropdown-item" href="/pledge">공약 등록</a></li>
+                            {% if is_admin_user %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">관리자 전용</h6></li>
+                            <li><a class="dropdown-item" href="/admin/static-pages">페이지 수정</a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <div class="ms-lg-auto d-flex flex-column flex-lg-row align-items-lg-center gap-2 app-nav-actions">
+                    {% if session.get("user_id") %}
+                    <div class="dropdown">
+                        <button class="btn app-nav-btn app-nav-btn-ghost dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            내 계정
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end app-nav-menu">
+                            <li><a class="dropdown-item" href="/mypage">마이페이지</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="/login" data-supabase-logout>로그아웃</a></li>
+                        </ul>
+                    </div>
+                    {% else %}
+                    <a class="btn app-nav-btn app-nav-btn-soft" href="/login#signup">회원가입</a>
+                    <a class="btn app-nav-btn app-nav-btn-primary" href="/login">로그인</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    
+        {% block header %}{% endblock %}
+    
+
+    <main class="container py-4">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        {% block main %}{% endblock %}
+    </main>
+
+    <footer class="bg-white border-top py-4">
+        <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center">
+            <div class="small text-muted">공약 트래커</div>
+            <div>
+                <a class="text-muted me-3" href="{{ url_for('static', filename='pages/about.html') }}">소개</a>
+                <a class="text-muted me-3" href="{{ url_for('static', filename='pages/privacy.html') }}">개인정보처리방침</a>
+                <a class="text-muted" href="{{ url_for('static', filename='pages/contact.html') }}">문의</a>
+            </div>
+        </div>
+    </footer>
+
+    <button id="feedbackFabBtn" class="feedback-fab" type="button" aria-haspopup="dialog" aria-controls="feedbackModal">
+        의견 보내기
+    </button>
+
+    <section id="feedbackModal" class="feedback-modal" hidden>
+        <div class="feedback-backdrop" data-feedback-close></div>
+        <div class="feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle">
+            <div class="feedback-head">
+                <h2 id="feedbackModalTitle">의견 보내기</h2>
+                <button type="button" class="feedback-close-btn" data-feedback-close>닫기</button>
+            </div>
+            <p class="feedback-sub">현재 페이지에 대한 의견이나 신고 내용을 남겨주세요.</p>
+            <form id="feedbackForm" class="feedback-form">
+                <div class="feedback-field">
+                    <label for="feedbackReasonCategory">분류</label>
+                    <select id="feedbackReasonCategory">
+                        <option value="기능 개선">기능 개선</option>
+                        <option value="오류 제보">오류 제보</option>
+                        <option value="콘텐츠 신고">콘텐츠 신고</option>
+                        <option value="기타">기타</option>
+                    </select>
+                </div>
+                <div class="feedback-field">
+                    <label for="feedbackReasonText">내용</label>
+                    <textarea id="feedbackReasonText" rows="4" required placeholder="의견 또는 신고 사유를 입력해 주세요."></textarea>
+                </div>
+                <div class="feedback-field">
+                    <label for="feedbackTargetUrl">대상 URL</label>
+                    <input id="feedbackTargetUrl" type="text" readonly>
+                </div>
+                <div class="feedback-actions">
+                    <button type="button" class="feedback-btn ghost" data-feedback-close>취소</button>
+                    <button id="feedbackSubmitBtn" type="submit" class="feedback-btn primary">보내기</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        window.APP_CONTEXT = {
+            userId: {{ session.get("user_id") | tojson }},
+            email: {{ session.get("email") | tojson }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/userAuth.js', v='20260313r5') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js', v='20260313r5') }}"></script>
+    <script src="{{ url_for('static', filename='js/feedback-widget.js', v='20260313r2') }}"></script>
+</body>
+</html>
