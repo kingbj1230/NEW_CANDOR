@@ -1832,18 +1832,33 @@ def auth_login():
     access_token = str(payload.get("access_token") or "").strip()
     if not access_token:
         access_token = _extract_bearer_token(request.headers.get("Authorization"))
+    legacy_user_id = str(payload.get("user_id") or "").strip()
+    legacy_email = str(payload.get("email") or "").strip()
 
-    if not access_token:
-        return jsonify({"error": "access_token is required"}), 400
+    user_id = ""
+    email = ""
+    if access_token:
+        try:
+            user = _fetch_supabase_user(access_token)
+            user_id = str(user.get("id") or "").strip()
+            email = str(user.get("email") or "").strip()
+        except PermissionError:
+            session.clear()
+            return jsonify({"error": "invalid access token"}), 401
+        except Exception as exc:
+            if legacy_user_id and legacy_email:
+                app.logger.warning("auth_login token verification failed, falling back to legacy payload: %s", exc)
+                user_id = legacy_user_id
+                email = legacy_email
+            else:
+                raise
+    else:
+        if not legacy_user_id or not legacy_email:
+            return jsonify({"error": "access_token or (user_id and email) is required"}), 400
+        app.logger.warning("auth_login using legacy payload without access_token")
+        user_id = legacy_user_id
+        email = legacy_email
 
-    try:
-        user = _fetch_supabase_user(access_token)
-    except PermissionError:
-        session.clear()
-        return jsonify({"error": "invalid access token"}), 401
-
-    user_id = str(user.get("id") or "").strip()
-    email = str(user.get("email") or "").strip()
     if not user_id or not email:
         session.clear()
         return jsonify({"error": "invalid auth payload"}), 401
