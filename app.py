@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import json
 import os
 import re
+from secrets import token_urlsafe
+from threading import Lock
 
 load_dotenv()
 
@@ -11,7 +13,7 @@ from urllib import error as urlerror
 from urllib import parse, request as urlrequest
 from uuid import uuid4
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 
@@ -70,6 +72,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv(
     "SUPABASE_SERVICE_KEY",
     "",
 )
+SUPABASE_ANON_KEY = (os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_PUBLISHABLE_KEY") or "").strip()
 SUPABASE_REST_BASE = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
 SUPABASE_STORAGE_BASE = f"{SUPABASE_URL.rstrip('/')}/storage/v1"
 SUPABASE_CANDIDATE_IMAGE_BUCKET = os.getenv("SUPABASE_CANDIDATE_IMAGE_BUCKET", "candidate_images").strip() or "candidate_images"
@@ -94,10 +97,300 @@ EDITABLE_STATIC_PAGES = {
     "contact": {"filename": "contact.html", "label": "문의"},
 }
 NODE_SOURCE_TABLE_CANDIDATES = ("pledge_node_sources", "pledge_node__sources")
+REPORT_TYPE_CHOICES = {"신고", "의견"}
+OPEN_REPORT_STATUS_CHOICES = {"접수", "검토중"}
+RESOLVED_REPORT_STATUS_MARKERS = {"resolved", "done", "closed", "처리완료", "완료", "해결", "종결"}
+REJECTED_REPORT_STATUS_MARKERS = {"rejected", "반려"}
+API_CACHE_TTL_SECONDS = max(0, _env_int("API_CACHE_TTL_SECONDS", 30))
+_api_cache = {}
+AUTH_LOGIN_RATE_LIMIT_PER_MINUTE = max(1, _env_int("AUTH_LOGIN_RATE_LIMIT_PER_MINUTE", 30))
+REPORT_RATE_LIMIT_PER_MINUTE = max(1, _env_int("REPORT_RATE_LIMIT_PER_MINUTE", 20))
+_rate_limit_store = {}
+_rate_limit_lock = Lock()
+SECURITY_HEADERS_ENABLED = _env_bool("SECURITY_HEADERS_ENABLED", True)
+CSRF_ORIGIN_CHECK = _env_bool("CSRF_ORIGIN_CHECK", True)
+CSRF_TRUSTED_ORIGINS = tuple(
+    origin.strip().rstrip("/")
+    for origin in (os.getenv("CSRF_TRUSTED_ORIGINS") or "").split(",")
+    if origin.strip()
+)
+CSP_REPORT_ONLY = _env_bool("CSP_REPORT_ONLY", False)
+CSP_REPORT_URI = (os.getenv("CSP_REPORT_URI") or "").strip()
+ALLOW_FRAME_EMBED = _env_bool("ALLOW_FRAME_EMBED", False)
+HSTS_MAX_AGE_SECONDS = max(0, _env_int("HSTS_MAX_AGE_SECONDS", 31536000))
 
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _audit_log(action, **fields):
+    record = {"action": action, "time": _now_iso(), **fields}
+    app.logger.info("AUDIT %s", json.dumps(record, ensure_ascii=False, default=str))
+
+
+def _cache_clone(value):
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _cache_get(key):
+    if API_CACHE_TTL_SECONDS <= 0:
+        return None
+    entry = _api_cache.get(key)
+    if not entry:
+        return None
+    expires_at, value = entry
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if now_ts >= expires_at:
+        _api_cache.pop(key, None)
+        return None
+    return _cache_clone(value)
+
+
+def _cache_set(key, value):
+    if API_CACHE_TTL_SECONDS <= 0:
+        return
+    expires_at = datetime.now(timezone.utc).timestamp() + API_CACHE_TTL_SECONDS
+    _api_cache[key] = (expires_at, _cache_clone(value))
+
+
+def _invalidate_api_cache():
+    _api_cache.clear()
+
+
+def _client_ip():
+    fwd = str(request.headers.get("X-Forwarded-For") or "").strip()
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return str(request.remote_addr or "unknown").strip() or "unknown"
+
+
+def _is_rate_limited(bucket, limit, window_seconds=60):
+    now_ts = datetime.now(timezone.utc).timestamp()
+    key = (str(bucket), _client_ip())
+    with _rate_limit_lock:
+        existing = _rate_limit_store.get(key) or []
+        valid_hits = [ts for ts in existing if (now_ts - ts) < max(1, window_seconds)]
+        if len(valid_hits) >= max(1, int(limit)):
+            _rate_limit_store[key] = valid_hits
+            return True
+        valid_hits.append(now_ts)
+        _rate_limit_store[key] = valid_hits
+    return False
+
+
+def _normalize_origin(raw_url):
+    text = str(raw_url or "").strip()
+    if not text:
+        return ""
+    parsed = parse.urlparse(text)
+    scheme = str(parsed.scheme or "").lower()
+    netloc = str(parsed.netloc or "").strip().lower()
+    if scheme not in {"http", "https"} or not netloc:
+        return ""
+    return f"{scheme}://{netloc}"
+
+
+def _request_origin():
+    origin = _normalize_origin(request.host_url)
+    return origin.rstrip("/")
+
+
+def _trusted_origins():
+    trusted = {_request_origin()}
+    for origin in CSRF_TRUSTED_ORIGINS:
+        normalized = _normalize_origin(origin)
+        if normalized:
+            trusted.add(normalized)
+    return trusted
+
+
+def _request_is_https():
+    if request.is_secure:
+        return True
+    x_proto = str(request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    return x_proto == "https"
+
+
+def _should_check_origin():
+    if not CSRF_ORIGIN_CHECK:
+        return False
+    if str(request.method or "").upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return False
+    if request.path.startswith("/static/"):
+        return False
+    return True
+
+
+def _origin_allowed(value):
+    normalized = _normalize_origin(value)
+    if not normalized:
+        return False
+    return normalized in _trusted_origins()
+
+
+def _normalize_image_extension(ext):
+    raw = str(ext or "").strip().lower()
+    if raw in {"jpeg", "jfif"}:
+        return "jpg"
+    return raw
+
+
+def _detect_image_signature(content_bytes):
+    data = content_bytes or b""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg", "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png", "image/png"
+    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
+        return "gif", "image/gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp", "image/webp"
+    return None, None
+
+
+def _build_csp_header(nonce):
+    script_parts = ["'self'", "https://cdn.jsdelivr.net"]
+    if nonce:
+        script_parts.append(f"'nonce-{nonce}'")
+
+    connect_parts = ["'self'", "https://*.supabase.co", "wss://*.supabase.co"]
+    supabase_origin = _normalize_origin(SUPABASE_URL)
+    if supabase_origin:
+        connect_parts.append(supabase_origin)
+
+    frame_ancestors = "'self'" if ALLOW_FRAME_EMBED else "'none'"
+    directives = [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        f"frame-ancestors {frame_ancestors}",
+        "img-src 'self' data: https:",
+        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+        f"script-src {' '.join(script_parts)}",
+        f"connect-src {' '.join(connect_parts)}",
+        "form-action 'self'",
+    ]
+    if IS_PRODUCTION:
+        directives.append("upgrade-insecure-requests")
+    if CSP_REPORT_URI:
+        directives.append(f"report-uri {CSP_REPORT_URI}")
+    return "; ".join(directives)
+
+
+def _extract_bearer_token(header_value):
+    text = str(header_value or "").strip()
+    if not text:
+        return ""
+    if text.lower().startswith("bearer "):
+        return text[7:].strip()
+    return ""
+
+
+def _supabase_auth_apikey():
+    key = SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY
+    if not key:
+        raise RuntimeError("SUPABASE_ANON_KEY (or SUPABASE_SERVICE_ROLE_KEY) is not configured.")
+    return key
+
+
+def _fetch_supabase_user(access_token):
+    token = str(access_token or "").strip()
+    if not token:
+        raise ValueError("access_token is required")
+
+    req = urlrequest.Request(
+        url=f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "apikey": _supabase_auth_apikey(),
+        },
+        method="GET",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urlerror.HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise PermissionError("Invalid Supabase access token.") from exc
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Supabase auth verification failed ({exc.code}): {detail}") from exc
+    except urlerror.URLError as exc:
+        raise RuntimeError(f"Supabase auth verification failed (network): {exc}") from exc
+
+
+def _normalize_report_type(value, default="신고"):
+    raw = str(value or "").strip() or default
+    if raw not in REPORT_TYPE_CHOICES:
+        raise ValueError(f"report_type must be one of: {', '.join(sorted(REPORT_TYPE_CHOICES))}")
+    return raw
+
+
+def _normalize_report_status_for_admin(value, default="접수"):
+    raw = str(value or "").strip() or default
+    allowed = {"접수", "검토중", "처리완료", "반려"}
+    if raw not in allowed:
+        raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
+    return raw
+
+
+def _is_resolved_report_status(value):
+    normalized = str(value or "").replace(" ", "").lower()
+    return normalized in RESOLVED_REPORT_STATUS_MARKERS
+
+
+def _is_rejected_report_status(value):
+    normalized = str(value or "").replace(" ", "").lower()
+    return normalized in REJECTED_REPORT_STATUS_MARKERS
+
+
+def _sanitize_target_url(raw_url):
+    text = str(raw_url or "").strip()
+    if not text:
+        return None
+    if len(text) > 2048:
+        text = text[:2048]
+    try:
+        parsed = parse.urlparse(text)
+    except Exception:
+        return None
+    if parsed.scheme in {"http", "https"}:
+        return text
+    return None
+
+
+def _pagination_params(default_limit=None, max_limit=500):
+    limit_raw = str(request.args.get("limit") or "").strip()
+    offset_raw = str(request.args.get("offset") or "").strip()
+
+    offset = 0
+    if offset_raw:
+        try:
+            offset = max(0, int(offset_raw))
+        except (TypeError, ValueError):
+            offset = 0
+
+    if not limit_raw:
+        return default_limit, offset
+
+    try:
+        parsed_limit = int(limit_raw)
+    except (TypeError, ValueError):
+        return default_limit, offset
+    parsed_limit = max(1, parsed_limit)
+    if max_limit > 0:
+        parsed_limit = min(parsed_limit, max_limit)
+    return parsed_limit, offset
+
+
+def _slice_rows(rows, limit, offset):
+    total = len(rows or [])
+    if limit is None:
+        return rows, total
+    sliced = (rows or [])[offset: offset + limit]
+    return sliced, total
 
 
 @app.get("/healthz")
@@ -120,6 +413,8 @@ def _build_supabase_headers(extra_headers=None):
 
 
 def _supabase_request(method, table, query_params=None, payload=None, extra_headers=None):
+    if str(method or "").upper() in {"POST", "PATCH", "DELETE"}:
+        _invalidate_api_cache()
     query = f"?{parse.urlencode(query_params)}" if query_params else ""
     url = f"{SUPABASE_REST_BASE}/{table}{query}"
     body = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -489,6 +784,73 @@ def _year_from_date(value):
     return int(year_text) if year_text.isdigit() else None
 
 
+def _is_missing_column_runtime_error(exc):
+    message = str(exc or "").lower()
+    return "column" in message and "does not exist" in message
+
+
+def _supabase_get_with_select_fallback(table, query_params, select_candidates):
+    base_query = dict(query_params or {})
+    last_missing_column_error = None
+    include_order_options = [True]
+    if "order" in base_query:
+        include_order_options.append(False)
+
+    for include_order in include_order_options:
+        for select_text in select_candidates or []:
+            current_query = dict(base_query)
+            if not include_order:
+                current_query.pop("order", None)
+            current_query["select"] = select_text
+            try:
+                return _supabase_request("GET", table, query_params=current_query) or []
+            except RuntimeError as exc:
+                if _is_missing_relation_runtime_error(exc):
+                    return []
+                if _is_missing_column_runtime_error(exc):
+                    last_missing_column_error = exc
+                    continue
+                raise
+
+    if last_missing_column_error:
+        raise last_missing_column_error
+    return []
+
+
+def _fetch_terms_rows(candidate_filter=None, candidate_id=None, limit="5000"):
+    query_base = {"limit": str(limit)}
+    if candidate_filter:
+        query_base["candidate_id"] = candidate_filter
+    elif candidate_id is not None:
+        query_base["candidate_id"] = f"eq.{candidate_id}"
+
+    select_candidates = [
+        "id,candidate_id,election_id,position,term_start,term_end,created_at,created_by",
+        "id,candidate_id,election_id,position,term_start,term_end,created_at",
+        "id,candidate_id,election_id,position,term_start,term_end",
+        "id,candidate_id,election_id,position,term_start",
+        "id,candidate_id,election_id,position",
+        "id,candidate_id,election_id",
+        "*",
+    ]
+
+    for include_order in (True, False):
+        for select_text in select_candidates:
+            query_params = dict(query_base)
+            query_params["select"] = select_text
+            if include_order:
+                query_params["order"] = "term_start.desc"
+            try:
+                return _supabase_request("GET", "terms", query_params=query_params) or []
+            except RuntimeError as exc:
+                if _is_missing_relation_runtime_error(exc):
+                    return []
+                if _is_missing_column_runtime_error(exc):
+                    continue
+                raise
+    return []
+
+
 def _enrich_candidates_with_latest(rows):
     if not rows:
         return rows
@@ -498,25 +860,21 @@ def _enrich_candidates_with_latest(rows):
     if not candidate_filter:
         return rows
 
-    candidate_elections = _supabase_request(
-        "GET",
+    candidate_elections = _supabase_get_with_select_fallback(
         "candidate_elections",
         query_params={
-            "select": "id,candidate_id,election_id,party,created_at",
             "candidate_id": candidate_filter,
             "limit": "5000",
         },
-    ) or []
+        select_candidates=[
+            "id,candidate_id,election_id,party,created_at",
+            "id,candidate_id,election_id,party",
+            "id,candidate_id,election_id",
+            "*",
+        ],
+    )
 
-    terms = _supabase_request(
-        "GET",
-        "terms",
-        query_params={
-            "select": "id,candidate_id,election_id,position,term_start",
-            "candidate_id": candidate_filter,
-            "limit": "5000",
-        },
-    ) or []
+    terms = _fetch_terms_rows(candidate_filter=candidate_filter, limit="5000")
 
     election_ids = []
     for row in candidate_elections:
@@ -927,6 +1285,25 @@ def _get_pledge_node(pledge_node_id):
     return rows[0] if rows else None
 
 
+def _resolve_default_source_target_node_id(pledge_id):
+    pledge_key = str(pledge_id or "").strip()
+    if not pledge_key:
+        return None
+
+    rows = _sorted_node_rows(_fetch_pledge_nodes(pledge_key))
+    if not rows:
+        return None
+
+    root_rows = [row for row in rows if row.get("parent_id") is None]
+    goal_roots = [row for row in root_rows if str(row.get("name") or "").strip().lower() == "goal"]
+
+    for candidate in goal_roots + root_rows + rows:
+        node_id = candidate.get("id")
+        if node_id is not None:
+            return str(node_id)
+    return None
+
+
 def _normalize_progress_rate(value):
     try:
         parsed = float(value)
@@ -1256,9 +1633,41 @@ def api_admin_required(view):
 
 @app.errorhandler(RuntimeError)
 def handle_runtime_error(exc):
+    error_id = uuid4().hex
+    app.logger.exception("RuntimeError [%s]: %s", error_id, exc)
     if request.path.startswith("/api/"):
-        return jsonify({"error": str(exc)}), 500
+        if not IS_PRODUCTION:
+            return jsonify({"error": str(exc), "error_id": error_id}), 500
+        return jsonify({"error": "internal server error", "error_id": error_id}), 500
     raise exc
+
+
+@app.before_request
+def assign_request_nonce():
+    g.csp_nonce = token_urlsafe(16)
+    return None
+
+
+@app.before_request
+def enforce_state_change_origin_check():
+    if not _should_check_origin():
+        return None
+
+    origin = request.headers.get("Origin")
+    referer = request.headers.get("Referer")
+
+    if origin:
+        if not _origin_allowed(origin):
+            return jsonify({"error": "forbidden origin"}), 403
+        return None
+
+    if referer:
+        if not _origin_allowed(referer):
+            return jsonify({"error": "forbidden referer"}), 403
+        return None
+
+    # Non-browser clients may legitimately omit Origin/Referer.
+    return None
 
 
 @app.before_request
@@ -1293,12 +1702,33 @@ def after_request(response):
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Expires"] = 0
     response.headers["Pragma"] = "no-cache"
+
+    if SECURITY_HEADERS_ENABLED:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN" if ALLOW_FRAME_EMBED else "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+
+        csp_value = _build_csp_header(getattr(g, "csp_nonce", ""))
+        if CSP_REPORT_ONLY:
+            response.headers["Content-Security-Policy-Report-Only"] = csp_value
+        else:
+            response.headers["Content-Security-Policy"] = csp_value
+            response.headers.pop("Content-Security-Policy-Report-Only", None)
+
+        if HSTS_MAX_AGE_SECONDS > 0 and _request_is_https():
+            response.headers["Strict-Transport-Security"] = f"max-age={HSTS_MAX_AGE_SECONDS}; includeSubDomains"
     return response
 
 
 @app.context_processor
 def inject_template_flags():
-    return {"is_admin_user": _session_is_admin()}
+    return {
+        "is_admin_user": _session_is_admin(),
+        "csp_nonce": getattr(g, "csp_nonce", ""),
+    }
 
 
 @app.route("/")
@@ -1346,6 +1776,9 @@ def politicians_page():
 
 @app.route("/politicians/<candidate_id>")
 def politician_detail_page(candidate_id):
+    normalized = str(candidate_id or "").strip().lower()
+    if not normalized or normalized in {"undefined", "null", "none", "nan"}:
+        return redirect(url_for("politicians_page"))
     return render_template("politician_detail.html", candidate_id=candidate_id)
 
 
@@ -1392,13 +1825,30 @@ def static_pages_admin_page():
 
 @app.route("/auth/login", methods=["POST"])
 def auth_login():
+    if _is_rate_limited("auth_login", AUTH_LOGIN_RATE_LIMIT_PER_MINUTE, window_seconds=60):
+        return jsonify({"error": "too many login attempts"}), 429
+
     payload = request.get_json(silent=True) or {}
-    user_id = payload.get("user_id")
-    email = payload.get("email")
+    access_token = str(payload.get("access_token") or "").strip()
+    if not access_token:
+        access_token = _extract_bearer_token(request.headers.get("Authorization"))
 
+    if not access_token:
+        return jsonify({"error": "access_token is required"}), 400
+
+    try:
+        user = _fetch_supabase_user(access_token)
+    except PermissionError:
+        session.clear()
+        return jsonify({"error": "invalid access token"}), 401
+
+    user_id = str(user.get("id") or "").strip()
+    email = str(user.get("email") or "").strip()
     if not user_id or not email:
-        return jsonify({"error": "user_id and email are required"}), 400
+        session.clear()
+        return jsonify({"error": "invalid auth payload"}), 401
 
+    session.clear()
     session["user_id"] = user_id
     session["email"] = email
     session["last_activity_ts"] = int(datetime.now(timezone.utc).timestamp())
@@ -1442,25 +1892,31 @@ def upload_image():
     original_name = image_file.filename or ""
     extension = ""
     if "." in original_name:
-        extension = original_name.rsplit(".", 1)[1].lower()
+        extension = _normalize_image_extension(original_name.rsplit(".", 1)[1])
     elif image_file.mimetype in MIME_TO_EXT:
-        extension = MIME_TO_EXT[image_file.mimetype]
+        extension = _normalize_image_extension(MIME_TO_EXT[image_file.mimetype])
 
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+    if extension not in {_normalize_image_extension(ext) for ext in ALLOWED_IMAGE_EXTENSIONS}:
         return jsonify({"error": "잘못된 파일 확장자입니다."}), 400
-
-    saved_name = f"{uuid4().hex}.{extension}"
-    object_path = f"{SUPABASE_CANDIDATE_IMAGE_FOLDER}/{saved_name}" if SUPABASE_CANDIDATE_IMAGE_FOLDER else saved_name
 
     image_bytes = image_file.read()
     if not image_bytes:
         return jsonify({"error": "이미지 파일이 비어 있습니다."}), 400
 
+    detected_ext, detected_mime = _detect_image_signature(image_bytes)
+    if not detected_ext:
+        return jsonify({"error": "이미지 시그니처를 확인할 수 없는 파일입니다."}), 400
+    if extension and extension != detected_ext:
+        return jsonify({"error": "파일 확장자와 실제 이미지 형식이 일치하지 않습니다."}), 400
+
+    saved_name = f"{uuid4().hex}.{detected_ext}"
+    object_path = f"{SUPABASE_CANDIDATE_IMAGE_FOLDER}/{saved_name}" if SUPABASE_CANDIDATE_IMAGE_FOLDER else saved_name
+
     public_url = _upload_to_supabase_storage(
         bucket=SUPABASE_CANDIDATE_IMAGE_BUCKET,
         object_path=object_path,
         content_bytes=image_bytes,
-        content_type=image_file.mimetype or f"image/{extension}",
+        content_type=detected_mime or image_file.mimetype or f"image/{detected_ext}",
     )
     return jsonify({"ok": True, "path": public_url, "filename": saved_name}), 200
 
@@ -1604,15 +2060,7 @@ def api_candidate_admin_candidate_elections():
 @api_login_required
 def api_candidate_admin_terms():
     if request.method == "GET":
-        rows = _supabase_request(
-            "GET",
-            "terms",
-            query_params={
-                "select": "id,candidate_id,election_id,position,term_start,term_end,created_at,created_by",
-                "order": "term_start.desc",
-                "limit": "1000",
-            },
-        ) or []
+        rows = _fetch_terms_rows(limit="1000")
         return jsonify({"rows": rows})
 
     payload = request.get_json(silent=True) or {}
@@ -1689,6 +2137,7 @@ def api_progress_admin_node_sources():
     uid = _session_user_id()
     payload = request.get_json(silent=True) or {}
     pledge_node_id = (payload.get("pledge_node_id") or "").strip()
+    pledge_id = (payload.get("pledge_id") or "").strip()
     source_id = (payload.get("source_id") or "").strip()
     try:
         source_role = _normalize_node_source_role(payload.get("source_role") or "참고출처")
@@ -1696,10 +2145,20 @@ def api_progress_admin_node_sources():
         return jsonify({"error": str(exc)}), 400
     note = (payload.get("note") or "").strip() or None
 
-    if not pledge_node_id or not source_id:
-        return jsonify({"error": "pledge_node_id and source_id are required"}), 400
-    if not _get_pledge_node(pledge_node_id):
+    if not source_id:
+        return jsonify({"error": "source_id is required"}), 400
+
+    if not pledge_node_id and pledge_id:
+        pledge_node_id = _resolve_default_source_target_node_id(pledge_id) or ""
+
+    if not pledge_node_id:
+        return jsonify({"error": "pledge_node_id or pledge_id is required"}), 400
+
+    pledge_node = _get_pledge_node(pledge_node_id)
+    if not pledge_node:
         return jsonify({"error": "pledge_node not found"}), 404
+    if pledge_id and str(pledge_node.get("pledge_id")) != str(pledge_id):
+        return jsonify({"error": "pledge_node does not belong to pledge_id"}), 400
     if not _ensure_source_exists(source_id):
         return jsonify({"error": "source not found"}), 404
 
@@ -1900,158 +2359,175 @@ def api_politicians():
 
 @app.route("/api/promises", methods=["GET"])
 def api_promises():
-    candidates = _supabase_request(
-        "GET",
-        "candidates",
-        query_params={"select": "id,name", "order": "name.asc", "limit": "500"},
-    ) or []
-
-    candidate_elections = _supabase_request(
-        "GET",
-        "candidate_elections",
-        query_params={"select": "id,candidate_id,election_id,party,result,candidate_number", "limit": "5000"},
-    ) or []
-    candidate_election_map = {
-        str(row.get("id")): row
-        for row in candidate_elections
-        if row.get("id") is not None
-    }
-
-    election_ids = []
-    for row in candidate_elections:
-        election_id = row.get("election_id")
-        if election_id is None:
-            continue
-        election_id_str = str(election_id)
-        if election_id_str not in election_ids:
-            election_ids.append(election_id_str)
-
-    election_map = {}
-    election_filter = _to_in_filter(election_ids)
-    if election_filter:
-        elections = _supabase_request(
+    limit, offset = _pagination_params(default_limit=None, max_limit=500)
+    is_admin = _is_admin(_session_user_id())
+    cache_key = f"api_promises:{'admin' if is_admin else 'public'}"
+    cached = _cache_get(cache_key)
+    if cached:
+        candidates = cached.get("candidates") or []
+        cards = cached.get("cards") or []
+    else:
+        candidates = _supabase_request(
             "GET",
-            "elections",
+            "candidates",
+            query_params={"select": "id,name", "order": "name.asc", "limit": "500"},
+        ) or []
+
+        candidate_elections = _supabase_request(
+            "GET",
+            "candidate_elections",
+            query_params={"select": "id,candidate_id,election_id,party,result,candidate_number", "limit": "5000"},
+        ) or []
+        candidate_election_map = {
+            str(row.get("id")): row
+            for row in candidate_elections
+            if row.get("id") is not None
+        }
+
+        election_ids = []
+        for row in candidate_elections:
+            election_id = row.get("election_id")
+            if election_id is None:
+                continue
+            election_id_str = str(election_id)
+            if election_id_str not in election_ids:
+                election_ids.append(election_id_str)
+
+        election_map = {}
+        election_filter = _to_in_filter(election_ids)
+        if election_filter:
+            elections = _supabase_request(
+                "GET",
+                "elections",
+                query_params={
+                    "select": "id,election_type,title,election_date",
+                    "id": election_filter,
+                    "limit": "5000",
+                },
+            ) or []
+            election_map = {str(row.get("id")): row for row in elections if row.get("id") is not None}
+
+        pledges = _supabase_request(
+            "GET",
+            "pledges",
             query_params={
-                "select": "id,election_type,title,election_date",
-                "id": election_filter,
-                "limit": "5000",
+                "select": "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at,created_by,updated_at,updated_by",
+                "order": "sort_order.asc.nullslast,created_at.desc",
+                "limit": "1000",
             },
         ) or []
-        election_map = {str(row.get("id")): row for row in elections if row.get("id") is not None}
 
-    pledges = _supabase_request(
-        "GET",
-        "pledges",
-        query_params={
-            "select": "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at,created_by,updated_at,updated_by",
-            "order": "sort_order.asc.nullslast,created_at.desc",
-            "limit": "1000",
-        },
-    ) or []
+        for pledge in pledges:
+            candidate_election = candidate_election_map.get(str(pledge.get("candidate_election_id"))) or {}
+            election = election_map.get(str(candidate_election.get("election_id"))) or {}
+            pledge["candidate_id"] = candidate_election.get("candidate_id")
+            pledge["election_id"] = candidate_election.get("election_id")
+            pledge["party"] = candidate_election.get("party")
+            pledge["result"] = candidate_election.get("result")
+            pledge["candidate_number"] = candidate_election.get("candidate_number")
+            pledge["election_type"] = election.get("election_type")
+            pledge["election_title"] = election.get("title")
+            pledge["election_date"] = election.get("election_date")
 
-    for pledge in pledges:
-        candidate_election = candidate_election_map.get(str(pledge.get("candidate_election_id"))) or {}
-        election = election_map.get(str(candidate_election.get("election_id"))) or {}
-        pledge["candidate_id"] = candidate_election.get("candidate_id")
-        pledge["election_id"] = candidate_election.get("election_id")
-        pledge["party"] = candidate_election.get("party")
-        pledge["result"] = candidate_election.get("result")
-        pledge["candidate_number"] = candidate_election.get("candidate_number")
-        pledge["election_type"] = election.get("election_type")
-        pledge["election_title"] = election.get("title")
-        pledge["election_date"] = election.get("election_date")
+        if not is_admin:
+            pledges = [p for p in pledges if str(p.get("status") or "active") != "hidden"]
 
-    if not _is_admin(_session_user_id()):
-        pledges = [p for p in pledges if str(p.get("status") or "active") != "hidden"]
+        pledges = _attach_pledge_tree_rows(pledges)
+        cards = []
 
-    pledges = _attach_pledge_tree_rows(pledges)
-    cards = []
-
-    for pledge in pledges:
-        goals = pledge.get("goals") or []
-        for goal in goals:
-            goal_text = str(goal.get("text") or "").strip()
-            if not _is_execution_method_goal_text(goal_text):
-                continue
-
-            promises = goal.get("promises") or []
-            for promise in promises:
-                promise_text = str(promise.get("text") or "").strip()
-                items = promise.get("items") or []
-
-                item_texts = []
-                item_rates = []
-                for item in items:
-                    item_text = str(item.get("text") or "").strip()
-                    if item_text:
-                        item_texts.append(item_text)
-                    rate_raw = item.get("progress_rate")
-                    try:
-                        rate = float(rate_raw)
-                    except (TypeError, ValueError):
-                        continue
-                    if 0 <= rate <= 5:
-                        item_rates.append(rate)
-
-                if item_texts:
-                    content = " / ".join(item_texts)
-                    progress_rate = round(sum(item_rates) / len(item_rates), 2) if item_rates else None
-                else:
-                    content = ""
-                    progress_rate = None
-                    rate_raw = promise.get("progress_rate")
-                    try:
-                        rate = float(rate_raw)
-                    except (TypeError, ValueError):
-                        rate = None
-                    if rate is not None and 0 <= rate <= 5:
-                        progress_rate = round(rate, 2)
-
-                if not promise_text and not content:
+        for pledge in pledges:
+            goals = pledge.get("goals") or []
+            for goal in goals:
+                goal_text = str(goal.get("text") or "").strip()
+                if not _is_execution_method_goal_text(goal_text):
                     continue
 
-                cards.append(
-                    {
-                        "id": f"{pledge.get('id')}:{promise.get('id')}",
-                        "candidate_id": pledge.get("candidate_id"),
-                        "candidate_election_id": pledge.get("candidate_election_id"),
-                        "pledge_id": pledge.get("id"),
-                        "promise_node_id": promise.get("id"),
-                        "promise_title": promise_text,
-                        "content": content,
-                        "progress_rate": progress_rate,
-                        "category": pledge.get("category"),
-                        "election_id": pledge.get("election_id"),
-                        "election_type": pledge.get("election_type"),
-                        "election_title": pledge.get("election_title"),
-                        "election_date": pledge.get("election_date"),
-                        "party": pledge.get("party"),
-                        "result": pledge.get("result"),
-                        "candidate_number": pledge.get("candidate_number"),
-                        "pledge_sort_order": pledge.get("sort_order"),
-                        "promise_sort_order": promise.get("sort_order"),
-                    }
-                )
+                promises = goal.get("promises") or []
+                for promise in promises:
+                    promise_text = str(promise.get("text") or "").strip()
+                    items = promise.get("items") or []
 
-    cards = sorted(
-        cards,
-        key=lambda row: (
-            str(row.get("election_date") or ""),
-            str(row.get("candidate_id") or ""),
-            _safe_int(row.get("pledge_sort_order"), 999999),
-            _safe_int(row.get("promise_sort_order"), 999999),
-        ),
-        reverse=True,
-    )
+                    item_texts = []
+                    item_rates = []
+                    for item in items:
+                        item_text = str(item.get("text") or "").strip()
+                        if item_text:
+                            item_texts.append(item_text)
+                        rate_raw = item.get("progress_rate")
+                        try:
+                            rate = float(rate_raw)
+                        except (TypeError, ValueError):
+                            continue
+                        if 0 <= rate <= 5:
+                            item_rates.append(rate)
 
-    return jsonify({"candidates": candidates, "promises": cards})
+                    if item_texts:
+                        content = " / ".join(item_texts)
+                        progress_rate = round(sum(item_rates) / len(item_rates), 2) if item_rates else None
+                    else:
+                        content = ""
+                        progress_rate = None
+                        rate_raw = promise.get("progress_rate")
+                        try:
+                            rate = float(rate_raw)
+                        except (TypeError, ValueError):
+                            rate = None
+                        if rate is not None and 0 <= rate <= 5:
+                            progress_rate = round(rate, 2)
+
+                    if not promise_text and not content:
+                        continue
+
+                    cards.append(
+                        {
+                            "id": f"{pledge.get('id')}:{promise.get('id')}",
+                            "candidate_id": pledge.get("candidate_id"),
+                            "candidate_election_id": pledge.get("candidate_election_id"),
+                            "pledge_id": pledge.get("id"),
+                            "promise_node_id": promise.get("id"),
+                            "promise_title": promise_text,
+                            "content": content,
+                            "progress_rate": progress_rate,
+                            "category": pledge.get("category"),
+                            "election_id": pledge.get("election_id"),
+                            "election_type": pledge.get("election_type"),
+                            "election_title": pledge.get("election_title"),
+                            "election_date": pledge.get("election_date"),
+                            "party": pledge.get("party"),
+                            "result": pledge.get("result"),
+                            "candidate_number": pledge.get("candidate_number"),
+                            "pledge_sort_order": pledge.get("sort_order"),
+                            "promise_sort_order": promise.get("sort_order"),
+                        }
+                    )
+
+        cards = sorted(
+            cards,
+            key=lambda row: (
+                str(row.get("election_date") or ""),
+                str(row.get("candidate_id") or ""),
+                _safe_int(row.get("pledge_sort_order"), 999999),
+                _safe_int(row.get("promise_sort_order"), 999999),
+            ),
+            reverse=True,
+        )
+        _cache_set(cache_key, {"candidates": candidates, "cards": cards})
+
+    rows, total = _slice_rows(cards, limit, offset)
+    return jsonify({"candidates": candidates, "promises": rows, "total": total, "limit": limit, "offset": offset})
 
 
 @app.route("/api/progress-overview", methods=["GET"])
 def api_progress_overview():
+    limit, offset = _pagination_params(default_limit=None, max_limit=2000)
     election_type_filter = _normalize_compact_text(request.args.get("election_type"))
     is_admin = _is_admin(_session_user_id())
+    cache_key = f"api_progress_overview:{'admin' if is_admin else 'public'}:{election_type_filter or '-'}"
+    cached = _cache_get(cache_key)
+    if cached:
+        cached_rows = cached.get("rows") or []
+        rows, total = _slice_rows(cached_rows, limit, offset)
+        return jsonify({"rows": rows, "total": total, "limit": limit, "offset": offset})
 
     candidates = _supabase_request(
         "GET",
@@ -2074,7 +2550,7 @@ def api_progress_overview():
         },
     ) or []
     if not candidate_elections:
-        return jsonify({"rows": []})
+        return jsonify({"rows": [], "total": 0, "limit": limit, "offset": offset})
 
     election_ids = []
     for row in candidate_elections:
@@ -2219,59 +2695,117 @@ def api_progress_overview():
         key=lambda x: (str(x.get("election_date") or ""), str(x.get("election_title") or ""), str(x.get("candidate_name") or "")),
         reverse=True,
     )
-    return jsonify({"rows": rows})
+    _cache_set(cache_key, {"rows": rows})
+    sliced_rows, total = _slice_rows(rows, limit, offset)
+    return jsonify({"rows": sliced_rows, "total": total, "limit": limit, "offset": offset})
 
 
 @app.route("/api/politicians/<candidate_id>", methods=["GET"])
 def api_politician_detail(candidate_id):
-    is_admin = _is_admin(_session_user_id())
-    candidates = _supabase_request(
-        "GET",
-        "candidates",
-        query_params={
-            "select": "id,name,image,created_at,created_by,updated_at,updated_by",
-            "id": f"eq.{candidate_id}",
-            "limit": "1",
-        },
-    ) or []
+    candidate_id = str(candidate_id or "").strip()
+    if not candidate_id or candidate_id.lower() in {"undefined", "null", "none", "nan"}:
+        return jsonify({"error": "invalid candidate_id"}), 400
 
-    if not candidates:
+    try:
+        is_admin = bool(_is_admin(_session_user_id()))
+    except Exception as exc:
+        app.logger.exception("api_politician_detail admin check failed: candidate_id=%s error=%s", candidate_id, exc)
+        is_admin = False
+    detail_warnings = []
+    candidate_fetch_failed = False
+    try:
+        candidates = _supabase_get_with_select_fallback(
+            "candidates",
+            query_params={
+                "id": f"eq.{candidate_id}",
+                "limit": "1",
+            },
+            select_candidates=[
+                "id,name,image,created_at,created_by,updated_at,updated_by",
+                "id,name,image,created_at,updated_at",
+                "id,name,image,created_at",
+                "id,name,image",
+                "*",
+            ],
+        )
+    except Exception as exc:
+        app.logger.exception("api_politician_detail candidate fetch failed: candidate_id=%s error=%s", candidate_id, exc)
+        candidates = []
+        candidate_fetch_failed = True
+        detail_warnings.append("candidate")
+
+    if not candidates and not candidate_fetch_failed:
         return jsonify({"error": "not found"}), 404
 
-    candidates = _enrich_candidates_with_latest(candidates)
-    candidate = candidates[0]
+    if candidates:
+        try:
+            candidates = _enrich_candidates_with_latest(candidates)
+        except Exception as exc:
+            app.logger.exception("api_politician_detail candidate enrich failed: candidate_id=%s error=%s", candidate_id, exc)
+            detail_warnings.append("candidate_enrich")
+    candidate = (candidates[0] if candidates else {"id": candidate_id, "name": f"정치인 {candidate_id}", "image": None})
 
-    candidate_elections_for_candidate = _supabase_request(
-        "GET",
-        "candidate_elections",
-        query_params={
-            "select": "id,candidate_id,election_id,party,result,is_elect,candidate_number,created_at,created_by",
-            "candidate_id": f"eq.{candidate_id}",
-            "order": "created_at.desc",
-            "limit": "1000",
-        },
-    ) or []
+    try:
+        candidate_elections_for_candidate = _supabase_get_with_select_fallback(
+            "candidate_elections",
+            query_params={
+                "candidate_id": f"eq.{candidate_id}",
+                "order": "created_at.desc",
+                "limit": "1000",
+            },
+            select_candidates=[
+                "id,candidate_id,election_id,party,result,is_elect,candidate_number,created_at,created_by",
+                "id,candidate_id,election_id,party,result,is_elect,candidate_number,created_at",
+                "id,candidate_id,election_id,party,result,candidate_number,created_at",
+                "id,candidate_id,election_id,party,result,candidate_number",
+                "id,candidate_id,election_id,party,result",
+                "id,candidate_id,election_id",
+                "*",
+            ],
+        )
+    except Exception as exc:
+        app.logger.exception("api_politician_detail candidate_elections fetch failed: candidate_id=%s error=%s", candidate_id, exc)
+        candidate_elections_for_candidate = []
+        detail_warnings.append("candidate_elections")
 
     candidate_election_ids = [row.get("id") for row in candidate_elections_for_candidate if row.get("id") is not None]
     pledge_filter = _to_in_filter(candidate_election_ids)
     pledges = []
     if pledge_filter:
-        pledges = _supabase_request(
-            "GET",
-            "pledges",
-            query_params={
-                "select": "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at,created_by,updated_at,updated_by",
-                "candidate_election_id": pledge_filter,
-                "order": "sort_order.asc.nullslast,created_at.desc",
-                "limit": "1000",
-            },
-        ) or []
+        try:
+            pledges = _supabase_get_with_select_fallback(
+                "pledges",
+                query_params={
+                    "candidate_election_id": pledge_filter,
+                    "order": "sort_order.asc.nullslast,created_at.desc",
+                    "limit": "1000",
+                },
+                select_candidates=[
+                    "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at,created_by,updated_at,updated_by",
+                    "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at,updated_at",
+                    "id,candidate_election_id,sort_order,title,raw_text,category,status,created_at",
+                    "id,candidate_election_id,sort_order,title,raw_text,category,status",
+                    "id,candidate_election_id,title,raw_text,category,status",
+                    "id,candidate_election_id,title,raw_text",
+                    "*",
+                ],
+            )
+        except Exception as exc:
+            app.logger.exception("api_politician_detail pledges fetch failed: candidate_id=%s error=%s", candidate_id, exc)
+            pledges = []
+            detail_warnings.append("pledges")
         for pledge in pledges:
             pledge["candidate_id"] = candidate_id
 
     if not is_admin:
         pledges = [p for p in pledges if str(p.get("status") or "active") != "hidden"]
-    pledges = _attach_pledge_tree_rows(pledges)
+    try:
+        pledges = _attach_pledge_tree_rows(pledges)
+    except Exception as exc:
+        app.logger.exception("api_politician_detail pledge tree attach failed: candidate_id=%s error=%s", candidate_id, exc)
+        detail_warnings.append("pledge_tree")
+        for pledge in pledges:
+            pledge["goals"] = []
 
     election_links = candidate_elections_for_candidate
 
@@ -2287,15 +2821,25 @@ def api_politician_detail(candidate_id):
     election_map = {}
     if election_ids:
         election_filter = _to_in_filter(election_ids)
-        election_rows = _supabase_request(
-            "GET",
-            "elections",
-            query_params={
-                "select": "id,election_type,title,election_date",
-                "id": election_filter,
-                "limit": "5000",
-            },
-        ) or []
+        try:
+            election_rows = _supabase_get_with_select_fallback(
+                "elections",
+                query_params={
+                    "id": election_filter,
+                    "limit": "5000",
+                },
+                select_candidates=[
+                    "id,election_type,title,election_date",
+                    "id,election_type,title",
+                    "id,title,election_date",
+                    "id,title",
+                    "*",
+                ],
+            )
+        except Exception as exc:
+            app.logger.exception("api_politician_detail elections fetch failed: candidate_id=%s error=%s", candidate_id, exc)
+            election_rows = []
+            detail_warnings.append("elections")
         election_map = {str(row.get("id")): row for row in election_rows if row.get("id") is not None}
 
     for row in election_links:
@@ -2342,47 +2886,87 @@ def api_politician_detail(candidate_id):
         reverse=True,
     )
 
-    terms = _supabase_request(
-        "GET",
-        "terms",
-        query_params={
-            "select": "id,candidate_id,election_id,position,term_start,term_end,created_at,created_by",
-            "candidate_id": f"eq.{candidate_id}",
-            "order": "term_start.desc",
-            "limit": "200",
-        },
-    ) or []
+    try:
+        terms = _fetch_terms_rows(candidate_id=candidate_id, limit="200")
+    except Exception as exc:
+        app.logger.exception("api_politician_detail terms fetch failed: candidate_id=%s error=%s", candidate_id, exc)
+        terms = []
+        detail_warnings.append("terms")
 
-    return jsonify(
-        {
-            "candidate": candidate,
-            "pledges": pledges,
-            "election_history": election_links,
-            "election_sections": election_sections,
-            "terms": terms,
-            "is_admin": is_admin,
-        }
-    )
+    payload = {
+        "candidate": candidate,
+        "pledges": pledges,
+        "election_history": election_links,
+        "election_sections": election_sections,
+        "terms": terms,
+        "is_admin": is_admin,
+    }
+    if detail_warnings:
+        payload["warning"] = f"partial_data:{','.join(detail_warnings)}"
+    return jsonify(payload)
 
 
 @app.route("/api/report", methods=["POST"])
 @api_login_required
 def api_report():
+    if _is_rate_limited("api_report", REPORT_RATE_LIMIT_PER_MINUTE, window_seconds=60):
+        return jsonify({"error": "too many report requests"}), 429
+
     uid = _session_user_id()
     payload = request.get_json(silent=True) or {}
     candidate_id = payload.get("candidate_id") or None
     pledge_id = payload.get("pledge_id") or None
     reason = (payload.get("reason") or "").strip()
-    report_type = (payload.get("report_type") or "신고").strip() or "신고"
+    try:
+        report_type = _normalize_report_type(payload.get("report_type"), default="신고")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     reason_category = (payload.get("reason_category") or "").strip() or None
-    status = (payload.get("status") or "접수").strip() or "접수"
-    target_url = (payload.get("target_url") or "").strip() or (request.headers.get("Referer") or "")
+    status = "접수"
+    target_url = _sanitize_target_url(payload.get("target_url")) or _sanitize_target_url(request.headers.get("Referer"))
     now = _now_iso()
 
     if not reason:
         return jsonify({"error": "reason is required"}), 400
+    if len(reason) > 2000:
+        return jsonify({"error": "reason is too long (max 2000 chars)"}), 400
     if candidate_id and pledge_id:
         return jsonify({"error": "candidate_id and pledge_id cannot both be set"}), 400
+    if report_type == "신고" and not (candidate_id or pledge_id):
+        return jsonify({"error": "신고는 후보자 또는 공약 대상을 지정해야 합니다."}), 400
+
+    if candidate_id:
+        candidate_rows = _supabase_request(
+            "GET",
+            "candidates",
+            query_params={"select": "id", "id": f"eq.{candidate_id}", "limit": "1"},
+        ) or []
+        if not candidate_rows:
+            return jsonify({"error": "candidate not found"}), 404
+    if pledge_id:
+        pledge_rows = _supabase_request(
+            "GET",
+            "pledges",
+            query_params={"select": "id", "id": f"eq.{pledge_id}", "limit": "1"},
+        ) or []
+        if not pledge_rows:
+            return jsonify({"error": "pledge not found"}), 404
+
+    if report_type == "신고":
+        duplicate_query = {
+            "select": "id,status",
+            "user_id": f"eq.{uid}",
+            "report_type": "eq.신고",
+            "limit": "50",
+            "order": "created_at.desc",
+        }
+        if candidate_id:
+            duplicate_query["candidate_id"] = f"eq.{candidate_id}"
+        if pledge_id:
+            duplicate_query["pledge_id"] = f"eq.{pledge_id}"
+        duplicates = _supabase_request("GET", "reports", query_params=duplicate_query) or []
+        if any(str(row.get("status") or "").strip() in OPEN_REPORT_STATUS_CHOICES for row in duplicates):
+            return jsonify({"error": "이미 접수/검토중인 신고가 있습니다."}), 409
 
     _supabase_request(
         "POST",
@@ -2400,11 +2984,16 @@ def api_report():
             "updated_at": now,
         },
     )
-
-    if pledge_id and report_type == "신고":
-        _supabase_request("PATCH", "pledges", query_params={"id": f"eq.{pledge_id}"}, payload={"status": "hidden"})
-
-    return jsonify({"ok": True})
+    _audit_log(
+        "report_created",
+        user_id=uid,
+        report_type=report_type,
+        candidate_id=candidate_id,
+        pledge_id=pledge_id,
+        status=status,
+        reason_category=reason_category,
+    )
+    return jsonify({"ok": True, "status": status})
 
 
 @app.route("/api/mypage/reports", methods=["GET"])
@@ -2477,14 +3066,25 @@ def api_mypage_reports():
 @api_admin_required
 def api_mypage_report_update(report_id):
     uid = _session_user_id()
+    report_rows = _supabase_request(
+        "GET",
+        "reports",
+        query_params={"select": "id,pledge_id,report_type,status", "id": f"eq.{report_id}", "limit": "1"},
+    ) or []
+    if not report_rows:
+        return jsonify({"error": "not found"}), 404
+    report_row = report_rows[0]
+
     payload = request.get_json(silent=True) or {}
     patch_payload = {"updated_at": _now_iso()}
 
-    status_value = (payload.get("status") or "").strip()
     if "status" in payload:
-        patch_payload["status"] = status_value or "접수"
-        normalized = patch_payload["status"].replace(" ", "").lower()
-        if normalized in {"resolved", "done", "closed", "처리완료", "완료", "해결", "종결"}:
+        try:
+            patch_payload["status"] = _normalize_report_status_for_admin(payload.get("status"), default="접수")
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        if _is_resolved_report_status(patch_payload["status"]):
             patch_payload["resolved_at"] = patch_payload["updated_at"]
             patch_payload["resolved_by"] = uid
         else:
@@ -2504,6 +3104,25 @@ def api_mypage_report_update(report_id):
         query_params={"id": f"eq.{report_id}"},
         payload=patch_payload,
     )
+    _audit_log(
+        "report_updated",
+        admin_user_id=uid,
+        report_id=report_id,
+        status=patch_payload.get("status"),
+        has_admin_note=("admin_note" in patch_payload),
+    )
+
+    # 신고 처리 상태를 관리자 판단 이후에만 공약 숨김 상태에 반영한다.
+    if "status" in patch_payload and str(report_row.get("report_type") or "") == "신고":
+        pledge_id = report_row.get("pledge_id")
+        if pledge_id:
+            if _is_resolved_report_status(patch_payload["status"]):
+                _supabase_request("PATCH", "pledges", query_params={"id": f"eq.{pledge_id}"}, payload={"status": "hidden"})
+                _audit_log("pledge_hidden_by_report_resolution", admin_user_id=uid, report_id=report_id, pledge_id=pledge_id)
+            elif _is_rejected_report_status(patch_payload["status"]):
+                _supabase_request("PATCH", "pledges", query_params={"id": f"eq.{pledge_id}"}, payload={"status": "active"})
+                _audit_log("pledge_restored_by_report_rejection", admin_user_id=uid, report_id=report_id, pledge_id=pledge_id)
+
     return jsonify({"ok": True})
 
 
@@ -2571,6 +3190,10 @@ def api_mypage_pledge_update(pledge_id):
 @app.route("/api/admin/candidates/<candidate_id>", methods=["PATCH", "DELETE"])
 @api_admin_required
 def api_admin_candidate(candidate_id):
+    candidate_id = str(candidate_id or "").strip()
+    if not candidate_id:
+        return jsonify({"error": "invalid candidate_id"}), 400
+
     if request.method == "PATCH":
         payload = request.get_json(silent=True) or {}
         patch_payload = {
@@ -2585,6 +3208,62 @@ def api_admin_candidate(candidate_id):
         _supabase_request("PATCH", "candidates", query_params={"id": f"eq.{candidate_id}"}, payload=patch_payload)
         return jsonify({"ok": True})
 
+    candidate_rows = _supabase_request(
+        "GET",
+        "candidates",
+        query_params={"select": "id", "id": f"eq.{candidate_id}", "limit": "1"},
+    ) or []
+    if not candidate_rows:
+        return jsonify({"error": "not found"}), 404
+
+    def _delete_relation_rows_if_exists(table_name, query_params):
+        try:
+            _supabase_request("DELETE", table_name, query_params=query_params)
+        except RuntimeError as exc:
+            if _is_missing_relation_runtime_error(exc):
+                return
+            raise
+
+    candidate_elections = _supabase_get_with_select_fallback(
+        "candidate_elections",
+        query_params={"candidate_id": f"eq.{candidate_id}", "limit": "5000"},
+        select_candidates=[
+            "id,candidate_id,election_id",
+            "id,candidate_id",
+            "id",
+            "*",
+        ],
+    )
+    candidate_election_ids = [row.get("id") for row in candidate_elections if row.get("id") is not None]
+    candidate_election_filter = _to_in_filter(candidate_election_ids)
+
+    pledge_ids = []
+    if candidate_election_filter:
+        pledges = _supabase_get_with_select_fallback(
+            "pledges",
+            query_params={"candidate_election_id": candidate_election_filter, "limit": "5000"},
+            select_candidates=[
+                "id,candidate_election_id",
+                "id",
+                "*",
+            ],
+        )
+        pledge_ids = [row.get("id") for row in pledges if row.get("id") is not None]
+
+    pledge_filter = _to_in_filter(pledge_ids)
+    if pledge_filter:
+        _delete_relation_rows_if_exists("reports", {"pledge_id": pledge_filter})
+
+    _delete_relation_rows_if_exists("reports", {"candidate_id": f"eq.{candidate_id}"})
+
+    for pledge_id in pledge_ids:
+        _delete_pledge_tree(pledge_id)
+
+    if candidate_election_filter:
+        _delete_relation_rows_if_exists("pledges", {"candidate_election_id": candidate_election_filter})
+
+    _delete_relation_rows_if_exists("terms", {"candidate_id": f"eq.{candidate_id}"})
+    _delete_relation_rows_if_exists("candidate_elections", {"candidate_id": f"eq.{candidate_id}"})
     _supabase_request("DELETE", "candidates", query_params={"id": f"eq.{candidate_id}"})
     return jsonify({"ok": True})
 
