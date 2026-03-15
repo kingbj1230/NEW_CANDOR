@@ -83,7 +83,11 @@ MIME_TO_EXT = {
     "image/gif": "gif",
 }
 
-STATIC_PAGES_DIR = os.path.join(app.root_path, "static", "pages")
+IS_VERCEL = (os.getenv("VERCEL") or "").strip() == "1"
+STATIC_PAGES_SOURCE_DIR = os.path.join(app.root_path, "static", "pages")
+STATIC_PAGES_RUNTIME_DIR = (
+    os.path.join("/tmp", "static-pages") if IS_VERCEL else STATIC_PAGES_SOURCE_DIR
+)
 EDITABLE_STATIC_PAGES = {
     "about": {"filename": "about.html", "label": "소개"},
     "privacy": {"filename": "privacy.html", "label": "개인정보처리방침"},
@@ -1186,25 +1190,33 @@ def _session_is_admin():
         return bool(cached) if isinstance(cached, bool) else False
 
 
-def _static_page_path(page_key):
+def _static_page_path(page_key, runtime=False):
     config = EDITABLE_STATIC_PAGES.get(page_key)
     if not config:
         raise ValueError("invalid page key")
-    return os.path.join(STATIC_PAGES_DIR, config["filename"])
+    base_dir = STATIC_PAGES_RUNTIME_DIR if runtime else STATIC_PAGES_SOURCE_DIR
+    return os.path.join(base_dir, config["filename"])
 
 
 def _read_static_page(page_key):
-    path = _static_page_path(page_key)
-    try:
-        with open(path, "r", encoding="utf-8") as fp:
-            return fp.read()
-    except FileNotFoundError:
-        return ""
+    runtime_path = _static_page_path(page_key, runtime=True)
+    source_path = _static_page_path(page_key, runtime=False)
+    paths = [runtime_path]
+    if source_path != runtime_path:
+        paths.append(source_path)
+
+    for path in paths:
+        try:
+            with open(path, "r", encoding="utf-8") as fp:
+                return fp.read()
+        except FileNotFoundError:
+            continue
+    return ""
 
 
 def _write_static_page(page_key, content):
-    path = _static_page_path(page_key)
-    os.makedirs(STATIC_PAGES_DIR, exist_ok=True)
+    path = _static_page_path(page_key, runtime=True)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8", newline="\n") as fp:
         fp.write(content or "")
 
