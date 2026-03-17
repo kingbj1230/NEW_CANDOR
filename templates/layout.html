@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css', v='20260313r7') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css', v='20260317r2') }}">
     {% block head %}{% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
 </head>
@@ -50,6 +50,14 @@
                             <li><a class="dropdown-item" href="/admin/static-pages">페이지 수정</a></li>
                             {% endif %}
                         </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link app-nav-locked-link {% if current_path in ['/candidate', '/election', '/pledge'] %}active{% endif %}" href="/login" data-locked-nav-link aria-label="로그인 후 이용 가능합니다." title="로그인 후 이용 가능합니다.">
+                            <span class="app-nav-lock-label">등록</span>
+                            <span class="app-nav-lock-icon" aria-hidden="true">🔒</span>
+                            <span class="app-nav-lock-chip">로그인 필요</span>
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
@@ -139,13 +147,13 @@
     </section>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         window.APP_CONTEXT = {
             userId: {{ session.get("user_id") | tojson }},
             email: {{ session.get("email") | tojson }}
         };
     </script>
-    <script src="{{ url_for('static', filename='js/userAuth.js', v='20260313r5') }}"></script>
+    <script src="{{ url_for('static', filename='js/userAuth.js', v='20260317r2') }}"></script>
     <script src="{{ url_for('static', filename='js/script.js', v='20260313r5') }}"></script>
     <script src="{{ url_for('static', filename='js/feedback-widget.js', v='20260313r2') }}"></script>
 </body>

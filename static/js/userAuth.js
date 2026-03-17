@@ -2,7 +2,7 @@
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR4dW1wa2doc2tnaXByd3FwaWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3NzU1MDksImV4cCI6MjA4MzM1MTUwOX0.kpChb4rlwOU_q8_q9DMn_0ZbOizhmwsjl4rjA9ZCQWk";
 
 let supabaseClient = null;
-const AUTO_LOGOUT_IDLE_MS = 60 * 60 * 1000;
+const AUTO_LOGOUT_IDLE_MS = 3 * 60 * 60 * 1000;
 const ACTIVITY_SYNC_MIN_INTERVAL_MS = 2 * 60 * 1000;
 const REMEMBER_LOGIN_ENABLED_KEY = "candor:remember_login_enabled";
 const REMEMBER_LOGIN_EMAIL_KEY = "candor:remember_login_email";
@@ -82,8 +82,9 @@ function persistRememberedLoginInfo(email, password) {
   if (email) {
     localStorage.setItem(REMEMBER_LOGIN_EMAIL_KEY, email);
   }
-  if (password) {
-    localStorage.setItem(REMEMBER_LOGIN_PASSWORD_KEY, password);
+  if (typeof password === "string") {
+    if (password) localStorage.setItem(REMEMBER_LOGIN_PASSWORD_KEY, password);
+    else localStorage.removeItem(REMEMBER_LOGIN_PASSWORD_KEY);
   }
 }
 
@@ -100,7 +101,7 @@ function bindRememberLoginOption() {
         localStorage.removeItem(REMEMBER_LOGIN_PASSWORD_KEY);
       } else {
         const email = valueById("loginEmail") || valueById("signupEmail");
-        const password = valueById("loginPassword");
+        const password = valueById("loginPassword") || valueById("signupPassword");
         persistRememberedLoginInfo(email, password);
       }
     });
@@ -124,12 +125,34 @@ async function maybeStoreBrowserCredential(email, password) {
   }
 }
 
+function bindPasswordVisibilityToggles() {
+  const buttons = Array.from(document.querySelectorAll("[data-toggle-password]"));
+  if (!buttons.length) return;
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-toggle-password") || "";
+      const input = targetId ? document.getElementById(targetId) : null;
+      if (!input) return;
+      const isPasswordType = input.type === "password";
+      input.type = isPasswordType ? "text" : "password";
+      button.textContent = isPasswordType ? "숨기기" : "보기";
+      button.setAttribute("aria-pressed", isPasswordType ? "true" : "false");
+      button.setAttribute("aria-label", isPasswordType ? "비밀번호 숨기기" : "비밀번호 보기");
+    });
+  });
+}
+
 //supabase 로그인상태를 Flask 세션과 동기화하는 함수
-async function syncFlaskLogin(user) {
+async function syncFlaskLogin(accessToken, user = null) {
+  if (!accessToken) {
+    throw new Error("Supabase access token not found.");
+  }
   const resp = await fetch("/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      access_token: accessToken,
       user_id: user?.id || null,
       email: user?.email || null,
     }),
@@ -227,7 +250,7 @@ async function handleSignIn(emailArg, passwordArg) {
     return { data, error };
   }
 
-  await syncFlaskLogin(data.user);
+  await syncFlaskLogin(data?.session?.access_token, data?.user || null);
   await maybeStoreBrowserCredential(email, password);
   alert(`${data.user.email}님, 환영합니다!`);
   return { data, error: null };
@@ -313,14 +336,14 @@ async function syncInitialAuthState() {
   const client = getSupabaseClient();
   if (!client) return;
 
-  const { data, error } = await client.auth.getUser();
+  const { data, error } = await client.auth.getSession();
   if (error) {
     console.error("초기 인증 상태 조회 실패:", error.message);
     return;
   }
 
-  if (data?.user?.id && data?.user?.email) {
-    await syncFlaskLogin(data.user);
+  if (data?.session?.access_token) {
+    await syncFlaskLogin(data.session.access_token, data?.session?.user || null);
   } else {
     await syncFlaskLogout();
   }
@@ -460,10 +483,24 @@ function bindIdleAutoLogout() {
   noteUserActivity();
 }
 
+function bindLockedNavNotice() {
+  const lockedLinks = document.querySelectorAll("[data-locked-nav-link]");
+  if (!lockedLinks.length) return;
+
+  lockedLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      alert("로그인 후 이용 가능합니다.");
+      window.location.href = "/login";
+    });
+  });
+}
+
 //DOM이 완전히 로드된 후에 실행됨
 document.addEventListener("DOMContentLoaded", () => {
   getSupabaseClient();
   bindApiActivityTracking();
+  bindPasswordVisibilityToggles();
   loadRememberedLoginInfo();
   bindRememberLoginOption();
   (async () => {
@@ -475,6 +512,7 @@ document.addEventListener("DOMContentLoaded", () => {
   })();
   bindAuthForms();
   bindLogoutLink();
+  bindLockedNavNotice();
   openSignUpPanelFromHash();
   bindIdleAutoLogout();
 });

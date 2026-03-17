@@ -21,6 +21,27 @@ let candidateRows = [];
 let electionRows = [];
 let electedPairs = [];
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch (_err) {
+    return "";
+  }
+  return "";
+}
+
 function setMessage(text, type = "info") {
   if (!messageEl) return;
   messageEl.className = `candidate-message ${type}`;
@@ -60,6 +81,12 @@ function toDateLabel(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("ko-KR");
+}
+
+function toDateInputValue(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : "";
 }
 
 function parseDateLike(value) {
@@ -183,18 +210,19 @@ function renderCandidates(rows) {
   candidateList.innerHTML = rows
     .map((row) => {
       const createdAt = toDateLabel(row.created_at);
-      const imageMarkup = row.image
-        ? `<img class="candidate-avatar" src="${row.image}" alt="${row.name || "후보자"}">`
+      const imageUrl = sanitizeUrl(row.image);
+      const imageMarkup = imageUrl
+        ? `<img class="candidate-avatar" src="${imageUrl}" alt="${escapeHtml(row.name || "후보자")}">`
         : '<div class="candidate-avatar placeholder">No Image</div>';
 
       return `
       <article class="candidate-card">
         <div class="candidate-media">${imageMarkup}</div>
         <div>
-          <span class="tag">ID ${row.id}</span>
-          <h3 class="card-title">${row.name || "-"}</h3>
-          <p class="card-sub">등록자: ${row.created_by || "-"}</p>
-          <div class="card-meta">${createdAt} 생성</div>
+          <span class="tag">ID ${escapeHtml(row.id)}</span>
+          <h3 class="card-title">${escapeHtml(row.name || "-")}</h3>
+          <p class="card-sub">등록자: ${escapeHtml(row.created_by || "-")} · 생년월일: ${escapeHtml(toDateLabel(row.birth_date))}</p>
+          <div class="card-meta">${escapeHtml(createdAt)} 생성</div>
         </div>
       </article>
     `;
@@ -245,7 +273,7 @@ function populateElectedPairSelect() {
       const candidateName = candidate?.name || `후보자 ID ${pair.candidate_id}`;
       const electionTitle = election?.title || `선거 ID ${pair.election_id}`;
       const electionDate = election?.election_date || "일자 미지정";
-      return `<option value="${pair.candidate_id}::${pair.election_id}">${candidateName} - ${electionTitle} (${electionDate})</option>`;
+      return `<option value="${escapeHtml(pair.candidate_id)}::${escapeHtml(pair.election_id)}">${escapeHtml(candidateName)} - ${escapeHtml(electionTitle)} (${escapeHtml(electionDate)})</option>`;
     })
     .join("");
 
@@ -277,11 +305,11 @@ function renderTerms(rows) {
 
       return `
       <article class="election-card term-card">
-        <span class="tag">${row.position || "직책 미지정"}</span>
-        <h3 class="card-title">${candidateName}</h3>
-        <p class="card-sub">선거: ${electionTitle}</p>
-        <p class="card-sub">임기: ${termStart} ~ ${termEnd}</p>
-        <div class="card-meta">등록자: ${row.created_by || "-"} · ${createdAt} 생성</div>
+        <span class="tag">${escapeHtml(row.position || "직책 미지정")}</span>
+        <h3 class="card-title">${escapeHtml(candidateName)}</h3>
+        <p class="card-sub">선거: ${escapeHtml(electionTitle)}</p>
+        <p class="card-sub">임기: ${escapeHtml(termStart)} ~ ${escapeHtml(termEnd)}</p>
+        <div class="card-meta">등록자: ${escapeHtml(row.created_by || "-")} · ${escapeHtml(createdAt)} 생성</div>
       </article>
     `;
     })
@@ -314,13 +342,22 @@ candidateForm?.addEventListener("submit", async (event) => {
     const formData = new FormData(candidateForm);
     const name = (formData.get("name") || "").trim();
     const imageFile = formData.get("image");
+    const birthDateRaw = String(formData.get("birth_date") || "").trim();
+    const birthDate = toDateInputValue(birthDateRaw);
 
     if (!name || !imageFile) {
       throw new Error("이름과 이미지를 입력해 주세요.");
     }
+    if (birthDateRaw && !birthDate) {
+      throw new Error("생년월일 형식을 확인해 주세요. (YYYY-MM-DD)");
+    }
 
     const imagePath = await uploadImage(imageFile);
-    await apiPost("/api/candidate-admin/candidates", { name, image: imagePath });
+    await apiPost("/api/candidate-admin/candidates", {
+      name,
+      image: imagePath,
+      birth_date: birthDate || null,
+    });
 
     candidateForm.reset();
     await refreshAllCandidateAdminData();

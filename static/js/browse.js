@@ -38,6 +38,35 @@ function progressPercent(value) {
   return Math.max(0, Math.min(100, (n / 5) * 100));
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch (_err) {
+    return "";
+  }
+  return "";
+}
+
+function normalizeCandidateId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const lowered = text.toLowerCase();
+  if (["undefined", "null", "none", "nan"].includes(lowered)) return "";
+  return text;
+}
+
 function setBrowseMessage(text, type = "info") {
   const el = document.getElementById("browseMessage");
   if (!el) return;
@@ -87,29 +116,38 @@ function renderPoliticians(items) {
 
   listEl.innerHTML = items
     .map(
-      (c) => `
-    <article class="politician-card" data-candidate-id="${c.id}">
-      <div class="politician-card-head ${c.image ? "" : "no-photo"}">
-        ${c.image ? `<img src="${c.image}" alt="${c.name || "정치인"}">` : ""}
+      (c) => {
+        const rawCandidateId = normalizeCandidateId(c.id);
+        const candidateId = escapeHtml(rawCandidateId);
+        const candidateName = escapeHtml(c.name || "-");
+        const position = escapeHtml(c.position || "-");
+        const party = escapeHtml(c.party || "-");
+        const electionTitle = escapeHtml(c.election_title || "-");
+        const imageUrl = sanitizeUrl(c.image);
+        return `
+    <article class="politician-card" data-candidate-id="${candidateId}">
+      <div class="politician-card-head ${imageUrl ? "" : "no-photo"}">
+        ${imageUrl ? `<img src="${imageUrl}" alt="${candidateName || "정치인"}">` : ""}
         <div class="politician-actions" aria-hidden="true">
           <span class="action-chip">상세</span>
           <span class="action-chip action-primary">공약</span>
         </div>
       </div>
       <div class="meta">
-        <h3>${c.name || "-"}</h3>
-        <p class="bio">${c.position || "-"} · ${c.party || "-"}</p>
+        <h3>${candidateName}</h3>
+        <p class="bio">${position} · ${party}</p>
         <div class="politician-stats">
-          <span><strong>${c.election_title || "-"}</strong> 최근 선거</span>
-          <span><strong>${c.party || "-"}</strong> 정당</span>
-          <span><strong>${c.position || "-"}</strong> 직책</span>
+          <span><strong>${electionTitle}</strong> 최근 선거</span>
+          <span><strong>${party}</strong> 정당</span>
+          <span><strong>${position}</strong> 직책</span>
         </div>
         <div class="card-actions-row">
-          <button type="button" class="report-btn" data-action="report-candidate" data-id="${c.id}">신고</button>
+          <button type="button" class="report-btn" data-action="report-candidate" data-id="${candidateId}">신고</button>
         </div>
       </div>
     </article>
-  `
+  `;
+      }
     )
     .join("");
 }
@@ -132,36 +170,40 @@ function renderPromises(items) {
       const progressValue = progressText(row.progress_rate);
       const progressWidth = progressPercent(row.progress_rate);
       const content = String(row.content || "").trim() || "세부 실행 항목 없음";
+      const candidateId = escapeHtml(normalizeCandidateId(row.candidate_id));
+      const candidateElectionId = escapeHtml(row.candidate_election_id || "");
+      const pledgeId = escapeHtml(row.pledge_id || "");
+      const ariaName = escapeHtml(`${candidateName} 공약 상세 보기`);
 
       return `
       <article
         class="promise-card clickable no-avatar"
-        data-candidate-id="${row.candidate_id || ""}"
-        data-candidate-election-id="${row.candidate_election_id || ""}"
-        data-pledge-id="${row.pledge_id || ""}"
+        data-candidate-id="${candidateId}"
+        data-candidate-election-id="${candidateElectionId}"
+        data-pledge-id="${pledgeId}"
         role="button"
         tabindex="0"
-        aria-label="${candidateName} 공약 상세 보기"
+        aria-label="${ariaName}"
       >
         <div class="promise-content">
-          <p class="bio">${candidateName}</p>
-          <h3 class="promise-name">${row.promise_title || "제목 없음"}</h3>
-          <p class="bio">${electionLine}</p>
-          <p class="bio">${partyLine}</p>
-          <p class="promise-summary">${content}</p>
+          <p class="bio">${escapeHtml(candidateName)}</p>
+          <h3 class="promise-name">${escapeHtml(row.promise_title || "제목 없음")}</h3>
+          <p class="bio">${escapeHtml(electionLine)}</p>
+          <p class="bio">${escapeHtml(partyLine)}</p>
+          <p class="promise-summary">${escapeHtml(content)}</p>
 
-          <div class="promise-progress-row" title="이행률 ${progressValue}">
+          <div class="promise-progress-row" title="이행률 ${escapeHtml(progressValue)}">
             <div class="promise-progress-track"><span style="width:${progressWidth}%;"></span></div>
-            <span class="promise-progress-value">${progressValue}</span>
+            <span class="promise-progress-value">${escapeHtml(progressValue)}</span>
           </div>
 
           <div class="promise-meta">
-            <span class="category">${categoryInfo.primary}</span>
-            ${categoryInfo.secondary ? `<span class="category-sub">${categoryInfo.secondary}</span>` : ""}
+            <span class="category">${escapeHtml(categoryInfo.primary)}</span>
+            ${categoryInfo.secondary ? `<span class="category-sub">${escapeHtml(categoryInfo.secondary)}</span>` : ""}
           </div>
 
           <div class="card-actions-row">
-            <button type="button" class="report-btn" data-action="report-pledge" data-id="${row.pledge_id || ""}">신고</button>
+            <button type="button" class="report-btn" data-action="report-pledge" data-id="${pledgeId}">신고</button>
           </div>
         </div>
       </article>
@@ -247,7 +289,7 @@ function populateCandidateFilter() {
     ).values()
   ).sort((a, b) => String(a.name).localeCompare(String(b.name), "ko"));
 
-  select.innerHTML = '<option value="">전체 후보</option>' + rows.map((row) => `<option value="${row.id}">${row.name}</option>`).join("");
+  select.innerHTML = '<option value="">전체 후보</option>' + rows.map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}</option>`).join("");
   if (current && rows.some((row) => String(row.id) === String(current))) select.value = current;
 }
 
@@ -269,7 +311,7 @@ function populateElectionFilter() {
     ).values()
   ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
-  select.innerHTML = '<option value="">전체 선거</option>' + rows.map((row) => `<option value="${row.id}">${row.label}</option>`).join("");
+  select.innerHTML = '<option value="">전체 선거</option>' + rows.map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.label)}</option>`).join("");
   if (current && rows.some((row) => String(row.id) === String(current))) select.value = current;
 }
 
@@ -287,7 +329,7 @@ function populateCategoryFilter() {
     )
   ).sort((a, b) => a.localeCompare(b, "ko"));
 
-  select.innerHTML = '<option value="">전체 카테고리</option>' + categories.map((c) => `<option value="${c}">${c}</option>`).join("");
+  select.innerHTML = '<option value="">전체 카테고리</option>' + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
   if (current && categories.includes(current)) select.value = current;
 }
 
@@ -328,8 +370,11 @@ function bindPoliticianPage() {
 
     const card = event.target.closest(".politician-card");
     if (!card) return;
-    const candidateId = card.getAttribute("data-candidate-id");
-    if (!candidateId) return;
+    const candidateId = normalizeCandidateId(card.getAttribute("data-candidate-id"));
+    if (!candidateId) {
+      setBrowseMessage("정치인 ID를 확인할 수 없습니다. 목록을 새로고침해 주세요.", "error");
+      return;
+    }
     window.location.href = `/politicians/${encodeURIComponent(candidateId)}`;
   });
 
@@ -388,8 +433,11 @@ function bindPromisePage() {
 
     const card = event.target.closest(".promise-card.clickable");
     if (!card) return;
-    const candidateId = card.getAttribute("data-candidate-id");
-    if (!candidateId) return;
+    const candidateId = normalizeCandidateId(card.getAttribute("data-candidate-id"));
+    if (!candidateId) {
+      setBrowseMessage("정치인 연결 정보가 누락되었습니다. 다른 공약을 선택해 주세요.", "error");
+      return;
+    }
 
     const candidateElectionId = card.getAttribute("data-candidate-election-id") || "";
     const pledgeId = card.getAttribute("data-pledge-id") || "";

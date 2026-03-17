@@ -46,6 +46,14 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function normalizeCandidateId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const lowered = text.toLowerCase();
+  if (["undefined", "null", "none", "nan"].includes(lowered)) return "";
+  return text;
+}
+
 function toDateLabel(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -101,6 +109,9 @@ function renderList(filteredRows) {
       const imageMarkup = row?.candidate_image
         ? `<img src="${escapeHtml(row.candidate_image)}" alt="${escapeHtml(row?.candidate_name || "정치인")}">`
         : '<div class="overview-avatar-empty">이미지</div>';
+      const candidateId = normalizeCandidateId(row?.candidate_id);
+      const detailHref = candidateId ? `/politicians/${encodeURIComponent(candidateId)}` : "#";
+      const detailLabel = candidateId ? "상세에서 평가 입력" : "상세 링크 없음";
 
       return `
         <article class="overview-item">
@@ -115,7 +126,7 @@ function renderList(filteredRows) {
               <span style="width:${percent}%;"></span>
             </div>
             <div class="score">${hasAvg ? `${escapeHtml(formatRate(avg))}` : "미평가"}</div>
-            <a class="overview-link" href="/politicians/${encodeURIComponent(row?.candidate_id || "")}">상세에서 평가 입력</a>
+            <a class="overview-link" href="${detailHref}" ${candidateId ? "" : 'aria-disabled="true" tabindex="-1"'}>${detailLabel}</a>
           </div>
         </article>
       `;

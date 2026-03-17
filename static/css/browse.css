@@ -373,61 +373,6 @@
   box-shadow: 0 12px 24px rgba(18, 35, 70, 0.08);
 }
 
-.progress-guide-card {
-  margin: 0 0 14px;
-  border: 1px solid #cfe0ff;
-  border-radius: 14px;
-  padding: 12px 14px;
-  background:
-    radial-gradient(circle at 85% 18%, rgba(59, 130, 246, 0.14), transparent 36%),
-    #f6f9ff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.progress-guide-main h3 {
-  margin: 0;
-  color: #173d77;
-  font-size: 1rem;
-  font-weight: 800;
-}
-
-.progress-guide-main p {
-  margin: 4px 0 0;
-  color: #365784;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.progress-guide-main small {
-  display: block;
-  margin-top: 6px;
-  color: #5f7494;
-  font-size: 0.79rem;
-  font-weight: 700;
-}
-
-.progress-guide-btn {
-  width: auto;
-  min-width: 130px;
-  min-height: 40px;
-  border-radius: 11px;
-  border: 1px solid #9db8e5;
-  background: linear-gradient(140deg, #2c67c0, #1a4b95);
-  color: #ffffff;
-  font-size: 0.82rem;
-  font-weight: 800;
-  padding: 0 12px;
-}
-
-.progress-guide-btn:disabled {
-  background: #e5ebf7;
-  border-color: #d2dced;
-  color: #7b88a0;
-}
-
 .politician-profile {
   border: 1px solid #e2e8f5;
   border-radius: 14px;
@@ -478,7 +423,7 @@
   padding-top: 10px;
   border-top: 1px solid #e9eef8;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
 }
 
@@ -700,6 +645,7 @@
   overflow: hidden;
 }
 
+.score-readonly,
 .score-input-trigger {
   display: inline-flex;
   align-items: center;
@@ -710,6 +656,9 @@
   margin: 0;
   line-height: 1;
   border-radius: 999px;
+}
+
+.score-input-trigger {
   cursor: pointer;
 }
 
@@ -767,7 +716,7 @@
   background: #16a34a;
 }
 
-.progress-edit-modal {
+.progress-modal {
   position: fixed;
   inset: 0;
   z-index: 2800;
@@ -777,17 +726,17 @@
   padding: 16px;
 }
 
-.progress-edit-backdrop {
+.progress-modal-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(11, 21, 38, 0.48);
   backdrop-filter: blur(1px);
 }
 
-.progress-edit-dialog {
+.progress-modal-panel {
   position: relative;
-  width: min(720px, calc(100vw - 32px));
-  max-height: min(88vh, 900px);
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(88vh, 920px);
   overflow: auto;
   border: 1px solid #d4dff3;
   border-radius: 16px;
@@ -796,7 +745,7 @@
   padding: 14px;
 }
 
-.progress-edit-head {
+.progress-modal-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -804,7 +753,7 @@
   margin-bottom: 8px;
 }
 
-.progress-edit-head h3 {
+.progress-modal-head h3 {
   margin: 0;
   color: #17385f;
   font-size: 1rem;
@@ -833,32 +782,32 @@
   line-height: 1.4;
 }
 
-.progress-edit-form {
+.progress-form {
   display: grid;
   gap: 9px;
 }
 
-.progress-edit-form .field {
+.progress-form .field {
   display: grid;
   gap: 5px;
 }
 
-.progress-edit-form .field-row {
+.progress-form .field-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.progress-edit-form label {
+.progress-form label {
   margin: 0;
   color: #254570;
   font-size: 0.8rem;
   font-weight: 800;
 }
 
-.progress-edit-form input,
-.progress-edit-form select,
-.progress-edit-form textarea {
+.progress-form input,
+.progress-form select,
+.progress-form textarea {
   width: 100%;
   border: 1px solid #cfdbf1;
   border-radius: 10px;
@@ -869,81 +818,20 @@
   font-family: inherit;
 }
 
-.progress-edit-form textarea {
+.progress-form textarea {
   resize: vertical;
-  min-height: 70px;
 }
 
-.progress-edit-form input:focus,
-.progress-edit-form select:focus,
-.progress-edit-form textarea:focus {
+.progress-form input:focus,
+.progress-form select:focus,
+.progress-form textarea:focus {
   outline: none;
   border-color: #7ea7de;
   background: #ffffff;
   box-shadow: 0 0 0 4px rgba(126, 167, 222, 0.2);
 }
 
-.progress-rate-guide {
-  margin: 2px 0 0;
-  border: 1px solid #d8e3f6;
-  border-radius: 10px;
-  background: #f5f9ff;
-  color: #2d4e79;
-  padding: 8px 10px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.progress-rate-criteria {
-  border: 1px solid #d8e3f6;
-  border-radius: 10px;
-  background: #fbfdff;
-  overflow: hidden;
-}
-
-.progress-rate-criteria summary {
-  cursor: pointer;
-  padding: 9px 10px;
-  color: #2d4e79;
-  font-size: 0.8rem;
-  font-weight: 800;
-  background: #f3f8ff;
-}
-
-.criteria-table-wrap {
-  max-height: 220px;
-  overflow: auto;
-}
-
-.criteria-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
-}
-
-.criteria-table th,
-.criteria-table td {
-  border-top: 1px solid #e1e9f8;
-  padding: 8px;
-  text-align: left;
-  vertical-align: top;
-  line-height: 1.45;
-}
-
-.criteria-table th {
-  background: #f7faff;
-  color: #22456f;
-  font-weight: 800;
-}
-
-.criteria-table td:first-child {
-  width: 64px;
-  color: #153a67;
-  font-weight: 800;
-}
-
-.progress-edit-form .divider {
+.progress-form .divider {
   margin-top: 3px;
   border-top: 1px solid #e1e9f8;
   padding-top: 9px;
@@ -952,14 +840,14 @@
   font-weight: 800;
 }
 
-.progress-actions {
+.progress-form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
 }
 
-.progress-actions button {
+.progress-form-actions button {
   border: 1px solid #9eb8df;
   border-radius: 10px;
   background: linear-gradient(140deg, #2a65bf, #18478f);
@@ -969,7 +857,7 @@
   font-weight: 800;
 }
 
-.progress-actions .outline-btn {
+.progress-form-actions .outline-btn {
   border-color: #c7d5ee;
   background: #f6faff;
   color: #375077;
@@ -1013,6 +901,21 @@
     grid-template-columns: 1fr;
   }
 
+  .inline-edit-grid,
+  .inline-edit-grid.triple {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-edit-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .inline-image-toggle {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .election-summary {
     flex-direction: column;
     align-items: flex-start;
@@ -1027,36 +930,12 @@
     flex-direction: column;
   }
 
-  .progress-edit-dialog {
-    width: min(100vw, calc(100vw - 16px));
-    max-height: 92vh;
-    border-radius: 12px;
-    padding: 10px;
-  }
-
-  .progress-edit-form .field-row {
-    grid-template-columns: 1fr;
-  }
-
-  .progress-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .progress-guide-card {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .progress-guide-btn {
-    width: 100%;
-  }
-
   .score-bar {
     width: 144px;
     height: 12px;
   }
 
+  .score-readonly,
   .score-input-trigger {
     gap: 6px;
     padding: 3px 6px;
@@ -1065,6 +944,22 @@
   .score-input-label {
     font-size: 0.72rem;
     padding: 0 7px;
+  }
+
+  .progress-modal-panel {
+    width: min(100vw, calc(100vw - 16px));
+    max-height: 92vh;
+    border-radius: 12px;
+    padding: 10px;
+  }
+
+  .progress-form .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1104,6 +999,108 @@
 
 .pledge-admin-actions {
   margin-top: 8px;
+}
+
+.inline-edit-form {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #dbe5f6;
+  border-radius: 12px;
+  background: #f8fbff;
+  display: grid;
+  gap: 8px;
+}
+
+.inline-edit-form h4 {
+  margin: 0;
+  color: #1f3a5f;
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.inline-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inline-edit-grid.triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inline-edit-form label {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  color: #2a4a73;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.inline-edit-form input,
+.inline-edit-form select,
+.inline-edit-form textarea {
+  width: 100%;
+  border: 1px solid #cfdbf1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1a2f4d;
+  padding: 9px 11px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.inline-edit-form textarea {
+  resize: vertical;
+}
+
+.inline-edit-form input:focus,
+.inline-edit-form select:focus,
+.inline-edit-form textarea:focus {
+  outline: none;
+  border-color: #7ea7de;
+  box-shadow: 0 0 0 4px rgba(126, 167, 222, 0.2);
+}
+
+.inline-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inline-image-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inline-image-toggle-label {
+  color: #2a4a73;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.inline-image-toggle-buttons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.inline-file-upload.is-hidden {
+  display: none;
+}
+
+.inline-form-help {
+  margin: 0;
+  color: #5a6f93;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.admin-btn.is-selected {
+  border-color: #9eb8df;
+  background: #e7f0ff;
+  color: #1e3a8a;
 }
 
 .card-actions-row {

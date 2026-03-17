@@ -22,10 +22,13 @@
                 <span>이메일로 간편하게 가입하세요</span>
                 <input type="text" id="signupName" name="name" placeholder="이름" autocomplete="name">
                 <input type="email" id="signupEmail" name="email" placeholder="이메일" autocomplete="email" required>
-                <input type="password" id="signupPassword" name="new-password" placeholder="비밀번호" autocomplete="new-password" required>
+                <div class="password-field">
+                    <input type="password" id="signupPassword" name="new-password" placeholder="비밀번호" autocomplete="new-password" required>
+                    <button type="button" class="password-toggle-btn" data-toggle-password="signupPassword" aria-label="비밀번호 보기" aria-pressed="false">보기</button>
+                </div>
                 <label class="remember-row" for="signupRememberLogin">
                     <input type="checkbox" id="signupRememberLogin">
-                    <span>로그인 정보 기억하기</span>
+                    <span>이메일/비밀번호 기억하기</span>
                 </label>
                 <button type="submit">회원가입</button>
             </form>
@@ -41,10 +44,13 @@
                 </div>
                 <span>가입한 계정으로 로그인하세요</span>
                 <input type="email" id="loginEmail" name="username" placeholder="이메일" autocomplete="username" required>
-                <input type="password" id="loginPassword" name="password" placeholder="비밀번호" autocomplete="current-password" required>
+                <div class="password-field">
+                    <input type="password" id="loginPassword" name="password" placeholder="비밀번호" autocomplete="current-password" required>
+                    <button type="button" class="password-toggle-btn" data-toggle-password="loginPassword" aria-label="비밀번호 보기" aria-pressed="false">보기</button>
+                </div>
                 <label class="remember-row" for="loginRememberLogin">
                     <input type="checkbox" id="loginRememberLogin">
-                    <span>로그인 정보 기억하기</span>
+                    <span>이메일/비밀번호 기억하기</span>
                 </label>
                 <a href="#">비밀번호를 잊으셨나요?</a>
                 <button type="submit">로그인</button>

@@ -33,6 +33,26 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function sanitizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+  } catch (_err) {
+    return "";
+  }
+  return "";
+}
+
+function normalizeCandidateId(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  const lowered = text.toLowerCase();
+  if (["undefined", "null", "none", "nan"].includes(lowered)) return "";
+  return text;
+}
+
 function setMypageMessage(text, type = "info") {
   const el = byId("mypageMessage");
   if (!el) return;
@@ -177,7 +197,7 @@ async function fetchMyPledges(userId) {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message || "공약 조회 실패");
-  return data || [];
+  return (data || []).filter((row) => String(row?.status || "active") !== "deleted");
 }
 
 async function fetchCandidateElectionMap(candidateElectionIds) {
@@ -253,7 +273,8 @@ function renderCandidates() {
 
   list.innerHTML = cachedCandidates
     .map((item) => {
-      const candidateId = encodeURIComponent(item.id);
+      const candidateId = normalizeCandidateId(item.id);
+      const detailHref = candidateId ? `/politicians/${encodeURIComponent(candidateId)}` : "";
       return `
       <li>
         <div class="item-row">
@@ -263,7 +284,7 @@ function renderCandidates() {
           </div>
           <div class="item-actions">
             <button type="button" class="mypage-action-btn" data-action="edit-candidate" data-id="${escapeHtml(item.id)}">수정</button>
-            <a class="mypage-action-link" href="/politicians/${candidateId}">상세</a>
+            ${detailHref ? `<a class="mypage-action-link" href="${detailHref}">상세</a>` : ""}
           </div>
         </div>
       </li>`;
@@ -273,7 +294,7 @@ function renderCandidates() {
 
 function getPledgeContext(item) {
   const candidateElection = candidateElectionMap.get(String(item.candidate_election_id)) || {};
-  const candidateId = candidateElection.candidate_id || null;
+  const candidateId = normalizeCandidateId(candidateElection.candidate_id) || null;
   const candidateName = candidateId ? candidateNameMap.get(String(candidateId)) || "후보자 정보 없음" : "후보자 정보 없음";
   const election = electionMap.get(String(candidateElection.election_id)) || {};
   const electionParts = [election.election_type, election.title, formatDate(election.election_date)]
@@ -354,7 +375,7 @@ function renderAdminReports() {
       const statusOptions = REPORT_STATUS_OPTIONS.map(
         (status) => `<option value="${escapeHtml(status)}" ${statusValue === status ? "selected" : ""}>${escapeHtml(status)}</option>`
       ).join("");
-      const targetUrl = String(r.target_url || "").trim();
+      const targetUrl = sanitizeUrl(r.target_url);
       const targetUrlMarkup = targetUrl
         ? `<a class="mypage-report-link" href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener noreferrer">대상 페이지 열기</a>`
         : '<span class="item-meta">대상 URL 없음</span>';

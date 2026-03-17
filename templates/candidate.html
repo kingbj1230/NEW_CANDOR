@@ -34,6 +34,9 @@
         <label for="candidateName">이름</label>
         <input id="candidateName" name="name" type="text" required placeholder="예: 홍길동">
 
+        <label for="candidateBirthDate">생년월일</label>
+        <input id="candidateBirthDate" name="birth_date" type="date" placeholder="YYYY-MM-DD">
+
         <label for="candidateImage">후보자 이미지</label>
         <input id="candidateImage" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,.gif" required>
 
@@ -84,5 +87,5 @@
   </section>
 </section>
 
-<script src="{{ url_for('static', filename='js/candidate-admin.js', v='20260313r2') }}"></script>
+<script src="{{ url_for('static', filename='js/candidate-admin.js', v='20260317r1') }}"></script>
 {% endblock %}

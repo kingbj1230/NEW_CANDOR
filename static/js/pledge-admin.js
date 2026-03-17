@@ -31,10 +31,9 @@
   confirmDeletePromiseNode: "중항목을 삭제할까요? 하위 세부항목도 함께 삭제됩니다.",
   confirmDeleteItemNode: "세부항목을 삭제할까요?",
   sourceEmpty: "아직 등록된 출처가 없습니다.",
-  sourceNeedTarget: "출처 연결 대상을 선택해 주세요.",
   sourceNeedTitle: "출처 제목은 필수입니다.",
-  sourceNeedStructure: "출처를 연결할 공약 구조가 없습니다. 먼저 공약 구조를 작성해 주세요.",
   sourceNeedAtLeastOne: "공약 출처를 최소 1개 이상 등록해 주세요.",
+  sourceNeedReusable: "재사용할 기존 출처를 선택해 주세요.",
   sourceSaving: "공약과 출처를 함께 저장하는 중입니다...",
   sourceSaved: "공약과 출처가 저장되었습니다.",
   sourceSaveFail: "공약 출처 저장 실패",
@@ -82,8 +81,13 @@ let blogItemSeq = 1;
 const GOAL_OPTION_OTHER = "\uae30\ud0c0";
 let pledgeSourceSeq = 1;
 let pledgeSourceDraftRows = [];
+let reusableSourceRows = [];
 const SOURCE_ROLE_OPTIONS = ["공식 공약집", "보조 근거", "참고 출처", "관련 자료"];
 const SOURCE_TYPE_OPTIONS = ["정부", "언론", "보고서", "연구", "예산", "보도자료", "연설", "법령", "기타"];
+const SOURCE_LINK_SCOPE_PLEDGE = "pledge";
+const SOURCE_LINK_SCOPE_GOAL = "goal";
+const SOURCE_MODE_NEW = "new";
+const SOURCE_MODE_REUSE = "reuse";
 
 function setMessage(text, type = "info") {
   if (!messageEl) return;
@@ -105,8 +109,17 @@ function setLoading(isLoading, text = TEXT.processing) {
 
 async function apiGet(url) {
   const resp = await fetch(url);
-  const payload = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(payload.error || TEXT.requestFail);
+  const raw = await resp.text();
+  let payload = {};
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    payload = {};
+  }
+  if (!resp.ok) {
+    const fallback = raw ? raw.slice(0, 200) : `${TEXT.requestFail} (HTTP ${resp.status})`;
+    throw new Error(payload.error || fallback);
+  }
   return payload;
 }
 
@@ -116,8 +129,17 @@ async function apiPost(url, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
   });
-  const payload = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(payload.error || TEXT.requestFail);
+  const raw = await resp.text();
+  let payload = {};
+  try {
+    payload = raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    payload = {};
+  }
+  if (!resp.ok) {
+    const fallback = raw ? raw.slice(0, 200) : `${TEXT.requestFail} (HTTP ${resp.status})`;
+    throw new Error(payload.error || fallback);
+  }
   return payload;
 }
 
@@ -634,50 +656,143 @@ function normalizeSourceTypeForApi(value) {
   return raw || "기타";
 }
 
-function buildSourceTargetOptionsFromGoals(goals) {
-  const options = [];
-  (goals || []).forEach((goal, goalIdx) => {
-    const gIndex = goalIdx + 1;
-    const goalTitle = cleanText(goal?.title || "");
-    options.push({
-      key: `g:${gIndex}`,
-      label: `[대항목 ${gIndex}] ${goalTitle || "(내용 없음)"}`,
-    });
-
-    (goal.promises || []).forEach((promise, promiseIdx) => {
-      const pIndex = promiseIdx + 1;
-      const promiseTitle = cleanText(promise?.title || "");
-      options.push({
-        key: `p:${gIndex}:${pIndex}`,
-        label: `[중항목 ${gIndex}.${pIndex}] ${promiseTitle || "(내용 없음)"}`,
-      });
-
-      (promise.items || []).forEach((item, itemIdx) => {
-        const iIndex = itemIdx + 1;
-        const itemText = cleanText(item?.detail || "");
-        options.push({
-          key: `i:${gIndex}:${pIndex}:${iIndex}`,
-          label: `[세부항목 ${gIndex}.${pIndex}.${iIndex}] ${itemText || "(내용 없음)"}`,
-        });
-      });
+function getReusablePledgeOptions() {
+  if (!Array.isArray(reusableSourceRows) || !reusableSourceRows.length) return [];
+  const byId = new Map();
+  reusableSourceRows.forEach((row) => {
+    (row?.links || []).forEach((link) => {
+      const pledgeId = cleanText(link?.pledge_id || "");
+      if (!pledgeId || byId.has(pledgeId)) return;
+      const pledgeTitle = cleanText(link?.pledge_title || "") || `공약 ${pledgeId}`;
+      byId.set(pledgeId, { value: pledgeId, label: pledgeTitle });
     });
   });
+  return Array.from(byId.values());
+}
+
+function getReusableSourceOptions(reusePledgeId = "") {
+  if (!Array.isArray(reusableSourceRows) || !reusableSourceRows.length) return [];
+  const pledgeIdFilter = cleanText(reusePledgeId || "");
+  return reusableSourceRows.map((row, idx) => {
+    const links = Array.isArray(row?.links) ? row.links : [];
+    if (pledgeIdFilter) {
+      const matched = links.some((link) => String(link?.pledge_id || "") === pledgeIdFilter);
+      if (!matched) return null;
+    }
+    const title = cleanText(row?.title || "") || `기존 출처 ${idx + 1}`;
+    const sourceType = cleanText(row?.source_type || "");
+    const publisher = cleanText(row?.publisher || "");
+    const used = Number(row?.usage_count || 0);
+    const representativePledge = cleanText((links[0] || {})?.pledge_title || "");
+    const parts = [title];
+    if (representativePledge) parts.push(`공약: ${representativePledge}`);
+    if (publisher) parts.push(publisher);
+    if (sourceType) parts.push(sourceType);
+    if (used > 0) parts.push(`사용 ${used}회`);
+    return {
+      value: String(row?.source_id || ""),
+      label: parts.join(" · "),
+    };
+  }).filter((row) => row && row.value);
+}
+
+function findReusableSourceRow(sourceId, reusePledgeId = "") {
+  const id = cleanText(sourceId);
+  if (!id) return null;
+  const pledgeIdFilter = cleanText(reusePledgeId || "");
+  return reusableSourceRows.find((row) => {
+    if (String(row?.source_id || "") !== id) return false;
+    if (!pledgeIdFilter) return true;
+    return (row?.links || []).some((link) => String(link?.pledge_id || "") === pledgeIdFilter);
+  }) || null;
+}
+
+function applyReusableSourceToDraftRow(row, sourceId) {
+  if (!row) return;
+  const source = findReusableSourceRow(sourceId, row.reusePledgeId);
+  if (!source) return;
+  row.sourceId = String(source.source_id || "");
+  row.title = cleanText(source.title || row.title || "");
+  row.url = cleanText(source.url || "");
+  row.sourceType = cleanText(source.source_type || row.sourceType || SOURCE_TYPE_OPTIONS[0]) || SOURCE_TYPE_OPTIONS[0];
+  row.publisher = cleanText(source.publisher || "");
+  row.publishedAt = cleanText(source.published_at || "");
+  row.summary = cleanText(source.summary || "");
+  if (!cleanText(row.note)) row.note = cleanText(source.note || "");
+}
+
+async function refreshReusableSources() {
+  const candidateElectionId = cleanText(candidateElectionSelect?.value || "");
+  if (!candidateElectionId) {
+    reusableSourceRows = [];
+    pledgeSourceDraftRows.forEach((row) => {
+      row.sourceMode = SOURCE_MODE_NEW;
+      row.sourceId = "";
+    });
+    renderPledgeSourceDraftRows();
+    return;
+  }
+  const payload = await apiGet(`/api/pledges/source-library?candidate_election_id=${encodeURIComponent(candidateElectionId)}`);
+  reusableSourceRows = Array.isArray(payload?.rows) ? payload.rows : [];
+  if (!reusableSourceRows.length) {
+    pledgeSourceDraftRows.forEach((row) => {
+      if (cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE) {
+        row.sourceMode = SOURCE_MODE_NEW;
+      }
+      row.sourceId = "";
+    });
+    renderPledgeSourceDraftRows();
+    return;
+  }
+  const pledgeOptions = getReusablePledgeOptions();
+  const defaultReusePledgeId = pledgeOptions[0]?.value || "";
+  pledgeSourceDraftRows.forEach((row) => {
+    if (cleanText(row.sourceMode || SOURCE_MODE_NEW) !== SOURCE_MODE_REUSE) return;
+    if (!cleanText(row.reusePledgeId) && defaultReusePledgeId) {
+      row.reusePledgeId = defaultReusePledgeId;
+    }
+    const sourceOptions = getReusableSourceOptions(row.reusePledgeId);
+    if (!cleanText(row.sourceId) && sourceOptions.length) {
+      applyReusableSourceToDraftRow(row, sourceOptions[0]?.value);
+      return;
+    }
+    if (cleanText(row.sourceId)) applyReusableSourceToDraftRow(row, row.sourceId);
+  });
+  renderPledgeSourceDraftRows();
+}
+
+function getSourceTargetGoals() {
+  if (activeEditorMode === "guided") {
+    return parseEditorText(pledgeRawTextGuidedInput?.value || "");
+  }
+  return blogDraftGoals || [];
+}
+
+function getPledgeSourceTargetOptions() {
+  const options = [];
+  const goals = getSourceTargetGoals();
+
+  goals.forEach((goal, goalIdx) => {
+    const goalTitle = cleanText(goal?.title || "") || `대항목 ${goalIdx + 1}`;
+    const goalPath = `g:${goalIdx + 1}`;
+    options.push({ value: goalPath, label: `${goalIdx + 1}. ${goalTitle}` });
+  });
+
   return options;
 }
 
-function getCurrentSourceTargetOptions() {
-  if (activeEditorMode === "paste") {
-    return buildSourceTargetOptionsFromGoals(blogDraftGoals || []);
-  }
-  const text = pledgeRawTextGuidedInput?.value || "";
-  const model = getParsedModel(text);
-  return buildSourceTargetOptionsFromGoals(model.goals || []);
-}
-
-function createEmptySourceRow(targetKey = "") {
+function createEmptySourceRow() {
+  const pledgeOptions = getReusablePledgeOptions();
+  const reusePledgeId = pledgeOptions[0]?.value || "";
+  const reusableOptions = getReusableSourceOptions(reusePledgeId);
+  const firstReusableId = reusableOptions[0]?.value || "";
   return {
     id: `src-${pledgeSourceSeq++}`,
-    targetKey: targetKey || "",
+    linkScope: SOURCE_LINK_SCOPE_PLEDGE,
+    targetPath: "",
+    sourceMode: SOURCE_MODE_NEW,
+    reusePledgeId,
+    sourceId: firstReusableId,
     sourceRole: SOURCE_ROLE_OPTIONS[0],
     title: "",
     url: "",
@@ -691,18 +806,43 @@ function createEmptySourceRow(targetKey = "") {
 
 function renderPledgeSourceDraftRows() {
   if (!pledgeSourceListEl) return;
-  const targetOptions = getCurrentSourceTargetOptions();
 
   if (!pledgeSourceDraftRows.length) {
     pledgeSourceListEl.innerHTML = `<p class="source-empty">${TEXT.sourceEmpty}</p>`;
     return;
   }
 
-  const hasTargets = targetOptions.length > 0;
+  const targetOptions = getPledgeSourceTargetOptions();
+  const pledgeOptions = getReusablePledgeOptions();
   pledgeSourceListEl.innerHTML = pledgeSourceDraftRows.map((row, idx) => {
-    const targetSelectOptions = hasTargets
-      ? targetOptions.map((target) => `<option value="${escapeHtml(target.key)}" ${row.targetKey === target.key ? "selected" : ""}>${escapeHtml(target.label)}</option>`).join("")
-      : `<option value="">${TEXT.sourceNeedStructure}</option>`;
+    const selectedScope = cleanText(row.linkScope || SOURCE_LINK_SCOPE_PLEDGE) === SOURCE_LINK_SCOPE_GOAL
+      ? SOURCE_LINK_SCOPE_GOAL
+      : SOURCE_LINK_SCOPE_PLEDGE;
+    const selectedSourceMode = cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE
+      ? SOURCE_MODE_REUSE
+      : SOURCE_MODE_NEW;
+    const selectedReusePledgeId = cleanText(row.reusePledgeId || "");
+    const reusableOptions = getReusableSourceOptions(selectedReusePledgeId);
+    const selectedSourceId = cleanText(row.sourceId || "");
+    const selectedTargetPath = cleanText(row.targetPath || "");
+    const targetOptionHtml = targetOptions
+      .map((option) => `<option value="${escapeHtml(option.value)}" ${selectedTargetPath === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
+      .join("");
+    const pledgeOptionHtml = pledgeOptions.length
+      ? pledgeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${selectedReusePledgeId === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")
+      : `<option value="">공약 없음</option>`;
+    const reusableOptionHtml = reusableOptions.length
+      ? reusableOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${selectedSourceId === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")
+      : `<option value="">재사용 가능한 출처 없음</option>`;
+    const scopeOptions = `
+      <option value="${SOURCE_LINK_SCOPE_PLEDGE}" ${selectedScope === SOURCE_LINK_SCOPE_PLEDGE ? "selected" : ""}>공약(pledges.id) 연결</option>
+      <option value="${SOURCE_LINK_SCOPE_GOAL}" ${selectedScope === SOURCE_LINK_SCOPE_GOAL ? "selected" : ""}>대항목(goal) 연결</option>
+    `;
+    const sourceModeOptions = `
+      <option value="${SOURCE_MODE_NEW}" ${selectedSourceMode === SOURCE_MODE_NEW ? "selected" : ""}>새 출처 입력</option>
+      <option value="${SOURCE_MODE_REUSE}" ${selectedSourceMode === SOURCE_MODE_REUSE ? "selected" : ""}>기존 출처 재사용</option>
+    `;
+    const disableSourceInputs = selectedSourceMode === SOURCE_MODE_REUSE ? "disabled" : "";
     const roleOptions = SOURCE_ROLE_OPTIONS.map((role) => `<option value="${escapeHtml(role)}" ${row.sourceRole === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("");
     const typeOptions = SOURCE_TYPE_OPTIONS.map((type) => `<option value="${escapeHtml(type)}" ${row.sourceType === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("");
 
@@ -713,12 +853,25 @@ function renderPledgeSourceDraftRows() {
           <button type="button" class="source-remove-btn" data-source-action="remove" data-source-row-id="${row.id}">삭제</button>
         </div>
         <div class="source-item-grid">
-          <div>
-            <label>연결 대상</label>
-            <select data-source-field="targetKey">
-              <option value="">연결할 공약 노드 선택</option>
-              ${targetSelectOptions}
-            </select>
+          <div class="full">
+            <label>연결 범위</label>
+            <select data-source-field="linkScope">${scopeOptions}</select>
+          </div>
+          <div class="full">
+            <label>출처 입력 방식</label>
+            <select data-source-field="sourceMode">${sourceModeOptions}</select>
+          </div>
+          <div class="full" ${selectedSourceMode === SOURCE_MODE_REUSE ? "" : 'style="display:none;"'}>
+            <label>기존 공약 선택</label>
+            <select data-source-field="reusePledgeId" ${pledgeOptions.length ? "" : "disabled"}>${pledgeOptionHtml}</select>
+          </div>
+          <div class="full" ${selectedSourceMode === SOURCE_MODE_REUSE ? "" : 'style="display:none;"'}>
+            <label>기존 출처 선택</label>
+            <select data-source-field="sourceId" ${reusableOptions.length ? "" : "disabled"}>${reusableOptionHtml}</select>
+          </div>
+          <div class="full" ${selectedScope === SOURCE_LINK_SCOPE_GOAL ? "" : 'style="display:none;"'}>
+            <label>연결 대상 대항목(goal)</label>
+            <select data-source-field="targetPath">${targetOptionHtml}</select>
           </div>
           <div>
             <label>출처 역할</label>
@@ -726,27 +879,27 @@ function renderPledgeSourceDraftRows() {
           </div>
           <div class="full">
             <label>출처 제목</label>
-            <input type="text" data-source-field="title" value="${escapeHtml(row.title)}" placeholder="예: 제21대 대통령선거 후보자 공약집" />
+            <input type="text" data-source-field="title" value="${escapeHtml(row.title)}" placeholder="예: 제21대 대통령선거 후보자 공약집" ${disableSourceInputs} />
           </div>
           <div class="full">
             <label>URL</label>
-            <input type="url" data-source-field="url" value="${escapeHtml(row.url)}" placeholder="https://..." />
+            <input type="url" data-source-field="url" value="${escapeHtml(row.url)}" placeholder="https://..." ${disableSourceInputs} />
           </div>
           <div>
             <label>출처 유형</label>
-            <select data-source-field="sourceType">${typeOptions}</select>
+            <select data-source-field="sourceType" ${disableSourceInputs}>${typeOptions}</select>
           </div>
           <div>
             <label>발행 기관</label>
-            <input type="text" data-source-field="publisher" value="${escapeHtml(row.publisher)}" placeholder="예: 중앙선거관리위원회" />
+            <input type="text" data-source-field="publisher" value="${escapeHtml(row.publisher)}" placeholder="예: 중앙선거관리위원회" ${disableSourceInputs} />
           </div>
           <div>
             <label>발행일</label>
-            <input type="date" data-source-field="publishedAt" value="${escapeHtml(row.publishedAt)}" />
+            <input type="date" data-source-field="publishedAt" value="${escapeHtml(row.publishedAt)}" ${disableSourceInputs} />
           </div>
           <div class="full">
             <label>요약</label>
-            <input type="text" data-source-field="summary" value="${escapeHtml(row.summary)}" placeholder="출처 요약" />
+            <input type="text" data-source-field="summary" value="${escapeHtml(row.summary)}" placeholder="출처 요약" ${disableSourceInputs} />
           </div>
           <div class="full">
             <label>메모</label>
@@ -759,8 +912,7 @@ function renderPledgeSourceDraftRows() {
 }
 
 function addPledgeSourceRow() {
-  const options = getCurrentSourceTargetOptions();
-  pledgeSourceDraftRows.push(createEmptySourceRow(options[0]?.key || ""));
+  pledgeSourceDraftRows.push(createEmptySourceRow());
   renderPledgeSourceDraftRows();
 }
 
@@ -772,6 +924,59 @@ function removePledgeSourceRow(rowId) {
 function updatePledgeSourceRowField(rowId, field, value) {
   const row = pledgeSourceDraftRows.find((item) => String(item.id) === String(rowId));
   if (!row || !field) return;
+  if (field === "linkScope") {
+    row.linkScope = cleanText(value) === SOURCE_LINK_SCOPE_GOAL ? SOURCE_LINK_SCOPE_GOAL : SOURCE_LINK_SCOPE_PLEDGE;
+    if (row.linkScope === SOURCE_LINK_SCOPE_PLEDGE) row.targetPath = "";
+    if (row.linkScope === SOURCE_LINK_SCOPE_GOAL && !cleanText(row.targetPath || "")) {
+      const goals = getPledgeSourceTargetOptions();
+      if (goals.length) row.targetPath = goals[0].value;
+    }
+    renderPledgeSourceDraftRows();
+    return;
+  }
+  if (field === "sourceMode") {
+    row.sourceMode = cleanText(value) === SOURCE_MODE_REUSE ? SOURCE_MODE_REUSE : SOURCE_MODE_NEW;
+    if (row.sourceMode === SOURCE_MODE_REUSE) {
+      const pledgeOptions = getReusablePledgeOptions();
+      const defaultReusePledgeId = pledgeOptions[0]?.value || "";
+      if (!cleanText(row.reusePledgeId || "") && defaultReusePledgeId) {
+        row.reusePledgeId = defaultReusePledgeId;
+      }
+      const options = getReusableSourceOptions(row.reusePledgeId);
+      if (!options.length) {
+        row.sourceMode = SOURCE_MODE_NEW;
+        setMessage("재사용 가능한 기존 출처가 없습니다. 새 출처를 입력해 주세요.", "info");
+      } else {
+        const preferredId = cleanText(row.sourceId || "") || options[0].value;
+        applyReusableSourceToDraftRow(row, preferredId);
+      }
+    }
+    renderPledgeSourceDraftRows();
+    return;
+  }
+  if (field === "reusePledgeId") {
+    row.reusePledgeId = cleanText(value);
+    const options = getReusableSourceOptions(row.reusePledgeId);
+    if (!options.length) {
+      row.sourceId = "";
+      renderPledgeSourceDraftRows();
+      return;
+    }
+    const nextSourceId = options.some((option) => option.value === cleanText(row.sourceId || ""))
+      ? cleanText(row.sourceId || "")
+      : options[0].value;
+    applyReusableSourceToDraftRow(row, nextSourceId);
+    renderPledgeSourceDraftRows();
+    return;
+  }
+  if (field === "sourceId") {
+    row.sourceId = cleanText(value);
+    if (row.sourceMode === SOURCE_MODE_REUSE) {
+      applyReusableSourceToDraftRow(row, row.sourceId);
+    }
+    renderPledgeSourceDraftRows();
+    return;
+  }
   row[field] = value;
 }
 
@@ -782,20 +987,28 @@ function resetPledgeSourceRows() {
 
 function collectPledgeSourceRowsForSave() {
   if (!pledgeSourceDraftRows.length) throw new Error(TEXT.sourceNeedAtLeastOne);
-  const targetOptions = getCurrentSourceTargetOptions();
-  const targetKeySet = new Set(targetOptions.map((row) => row.key));
-  if (!targetOptions.length) throw new Error(TEXT.sourceNeedStructure);
-
-  return pledgeSourceDraftRows.map((row) => {
-    const targetKey = cleanText(row.targetKey);
+  const goals = getPledgeSourceTargetOptions();
+  const goalPathSet = new Set(goals.map((goal) => goal.value));
+  const collected = pledgeSourceDraftRows.map((row) => {
+    const linkScope = cleanText(row.linkScope || SOURCE_LINK_SCOPE_PLEDGE) === SOURCE_LINK_SCOPE_GOAL
+      ? SOURCE_LINK_SCOPE_GOAL
+      : SOURCE_LINK_SCOPE_PLEDGE;
+    const sourceMode = cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE
+      ? SOURCE_MODE_REUSE
+      : SOURCE_MODE_NEW;
+    const sourceId = cleanText(row.sourceId || "") || null;
     const title = cleanText(row.title);
-    if (!targetKey || !targetKeySet.has(targetKey)) throw new Error(TEXT.sourceNeedTarget);
-    if (!title) throw new Error(TEXT.sourceNeedTitle);
+    if (sourceMode === SOURCE_MODE_REUSE && !sourceId) throw new Error(TEXT.sourceNeedReusable);
+    if (sourceMode !== SOURCE_MODE_REUSE && !title) throw new Error(TEXT.sourceNeedTitle);
 
     return {
-      targetKey,
+      source_id: sourceId,
+      link_scope: linkScope,
+      target_path: linkScope === SOURCE_LINK_SCOPE_GOAL
+        ? (cleanText(row.targetPath || "") || null)
+        : null,
       source_role: normalizeNodeSourceRole(row.sourceRole),
-      title,
+      title: title || null,
       url: cleanText(row.url) || null,
       source_type: normalizeSourceTypeForApi(row.sourceType),
       publisher: cleanText(row.publisher) || null,
@@ -804,81 +1017,23 @@ function collectPledgeSourceRowsForSave() {
       note: cleanText(row.note) || null,
     };
   });
-}
-
-function buildSavedNodeIdMap(nodes) {
-  const rows = Array.isArray(nodes) ? nodes : [];
-  const byParent = new Map();
-
-  const sorted = [...rows].sort((a, b) => {
-    const aSort = Number(a?.sort_order ?? 999999);
-    const bSort = Number(b?.sort_order ?? 999999);
-    if (aSort !== bSort) return aSort - bSort;
-    const aCreated = String(a?.created_at || "");
-    const bCreated = String(b?.created_at || "");
-    if (aCreated !== bCreated) return aCreated.localeCompare(bCreated);
-    return String(a?.id || "").localeCompare(String(b?.id || ""));
-  });
-
-  sorted.forEach((row) => {
-    const parentKey = row?.parent_id ? String(row.parent_id) : "__root__";
-    if (!byParent.has(parentKey)) byParent.set(parentKey, []);
-    byParent.get(parentKey).push(row);
-  });
-
-  function nodeType(row) {
-    const raw = String(row?.name || "").trim().toLowerCase();
-    if (raw === "goal" || raw === "promise" || raw === "item") return raw;
-    return row?.is_leaf ? "item" : "promise";
+  const goalScopedRows = collected.filter((row) => row.link_scope === SOURCE_LINK_SCOPE_GOAL);
+  if (goalScopedRows.length) {
+    if (!goals.length) throw new Error("대항목(goal)이 없어 goal 연결을 사용할 수 없습니다.");
+    const assigned = new Set();
+    goalScopedRows.forEach((row) => {
+      if (!row.target_path || !goalPathSet.has(row.target_path)) {
+        throw new Error("goal 연결 대상은 대항목(goal)만 선택할 수 있습니다.");
+      }
+      assigned.add(row.target_path);
+    });
+    const missing = goals.filter((goal) => !assigned.has(goal.value));
+    if (missing.length) {
+      const missingNames = missing.map((goal) => goal.label).join(", ");
+      throw new Error(`goal 연결을 선택한 경우 모든 대항목에 출처가 필요합니다: ${missingNames}`);
+    }
   }
-
-  const keyToNodeId = new Map();
-  const goals = (byParent.get("__root__") || []).filter((row) => nodeType(row) === "goal");
-  goals.forEach((goalRow, gIdx) => {
-    const g = gIdx + 1;
-    keyToNodeId.set(`g:${g}`, String(goalRow.id));
-    const promises = (byParent.get(String(goalRow.id)) || []).filter((row) => nodeType(row) === "promise");
-    promises.forEach((promiseRow, pIdx) => {
-      const p = pIdx + 1;
-      keyToNodeId.set(`p:${g}:${p}`, String(promiseRow.id));
-      const items = (byParent.get(String(promiseRow.id)) || []).filter((row) => nodeType(row) === "item");
-      items.forEach((itemRow, iIdx) => {
-        const i = iIdx + 1;
-        keyToNodeId.set(`i:${g}:${p}:${i}`, String(itemRow.id));
-      });
-    });
-  });
-
-  return keyToNodeId;
-}
-
-async function savePledgeSourcesForCreatedNodes(sourceRows, createdNodes) {
-  if (!sourceRows.length) return;
-  const keyToNodeId = buildSavedNodeIdMap(createdNodes || []);
-
-  for (const row of sourceRows) {
-    const pledgeNodeId = keyToNodeId.get(row.targetKey);
-    if (!pledgeNodeId) throw new Error(`${TEXT.sourceNeedTarget} (${row.targetKey})`);
-
-    const sourceResp = await apiPost("/api/progress-admin/sources", {
-      title: row.title,
-      url: row.url,
-      source_type: row.source_type,
-      publisher: row.publisher,
-      published_at: row.published_at,
-      summary: row.summary,
-      note: row.note,
-    });
-    const sourceId = sourceResp?.row?.id;
-    if (!sourceId) throw new Error("출처 생성 결과를 확인할 수 없습니다.");
-
-    await apiPost("/api/progress-admin/node-sources", {
-      pledge_node_id: pledgeNodeId,
-      source_id: sourceId,
-      source_role: row.source_role,
-      note: row.note,
-    });
-  }
+  return collected;
 }
 
 function findBlogGoal(goalId) {
@@ -1018,6 +1173,7 @@ async function refreshAllData() {
   elections = electionResp.rows || [];
   candidateElections = candidateElectionResp.rows || [];
   populateCandidateElectionSelects();
+  await refreshReusableSources();
 }
 
 function handleGuidedEditorKeydown(event) {
@@ -1068,6 +1224,15 @@ pledgeRawTextGuidedInput?.addEventListener("input", () => {
 });
 
 pledgeRawTextGuidedInput?.addEventListener("keydown", handleGuidedEditorKeydown);
+candidateElectionSelect?.addEventListener("change", async () => {
+  try {
+    await refreshReusableSources();
+  } catch (error) {
+    reusableSourceRows = [];
+    renderPledgeSourceDraftRows();
+    setMessage(error.message || TEXT.requestFail, "error");
+  }
+});
 blogNodeTypeSelect?.addEventListener("change", () => {
   syncBlogComposerState();
 });
@@ -1181,10 +1346,10 @@ pledgeForm?.addEventListener("submit", async (event) => {
   try {
     const payload = buildParserPayload();
     const sourceRows = collectPledgeSourceRowsForSave();
+    payload.sources = sourceRows;
     setLoading(true, TEXT.sourceSaving);
 
-    const pledgeResp = await apiPost("/api/pledges", payload);
-    await savePledgeSourcesForCreatedNodes(sourceRows, pledgeResp?.nodes || []);
+    await apiPost("/api/pledges", payload);
 
     setMessage(TEXT.sourceSaved, "success");
     resetParserForm();

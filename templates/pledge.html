@@ -153,7 +153,7 @@
                     </div>
                     <button id="addPledgeSourceBtn" type="button" class="source-add-btn">출처 추가</button>
                 </div>
-                <p class="source-help">공약 저장 전 최소 1개 이상의 출처를 등록해야 하며, 저장 직후 공약 노드와 자동으로 연결됩니다.</p>
+                <p class="source-help">출처는 공약(pledges.id) 또는 대항목(goal) 기준으로 연결할 수 있습니다. goal 연결을 선택하면 모든 대항목(goal)에 각각 출처를 지정해야 하며, 기존 출처 재사용은 같은 후보-선거의 기존 공약 출처에서 선택할 수 있습니다.</p>
                 <div id="pledgeSourceList" class="pledge-source-list"></div>
             </section>
 
@@ -172,5 +172,5 @@
     </div>
 </section>
 
-<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260313r3') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260317r2') }}"></script>
 {% endblock %}

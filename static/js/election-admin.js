@@ -18,6 +18,15 @@ const tabPanels = Array.from(document.querySelectorAll("[data-admin-tab-panel]")
 let candidateRows = [];
 let electionRows = [];
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function setMessage(text, type = "info") {
   if (!messageEl) return;
   messageEl.className = `candidate-message ${type}`;
@@ -52,8 +61,8 @@ function toDateLabel(value) {
 function populateSelect(selectEl, rows, placeholder, labelMaker) {
   if (!selectEl) return;
 
-  const options = rows.map((row) => `<option value="${row.id}">${labelMaker(row)}</option>`).join("");
-  selectEl.innerHTML = `<option value="">${placeholder}</option>${options}`;
+  const options = rows.map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(labelMaker(row))}</option>`).join("");
+  selectEl.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>${options}`;
 }
 
 function renderElections(rows) {
@@ -71,10 +80,10 @@ function renderElections(rows) {
 
       return `
       <article class="election-card">
-        <span class="tag">${row.election_type || "-"}</span>
-        <h3 class="card-title">${row.title || "-"}</h3>
-        <p class="card-sub">선거일: ${electionDate}</p>
-        <div class="card-meta">등록자: ${row.created_by || "-"} · ${createdAt} 생성</div>
+        <span class="tag">${escapeHtml(row.election_type || "-")}</span>
+        <h3 class="card-title">${escapeHtml(row.title || "-")}</h3>
+        <p class="card-sub">선거일: ${escapeHtml(electionDate)}</p>
+        <div class="card-meta">등록자: ${escapeHtml(row.created_by || "-")} · ${escapeHtml(createdAt)} 생성</div>
       </article>
     `;
     })
@@ -104,11 +113,11 @@ function renderCandidateElections(rows) {
 
       return `
       <article class="election-card relation-card">
-        <span class="tag">${row.result || "-"}</span>
-        <h3 class="card-title">${candidateName}</h3>
-        <p class="card-sub">${electionType} · ${electionTitle}</p>
-        <p class="card-sub">정당: ${row.party || "-"} · 기호: ${row.candidate_number || "-"}</p>
-        <div class="card-meta">${isElectText} · 등록자: ${row.created_by || "-"} · ${createdAt} 생성</div>
+        <span class="tag">${escapeHtml(row.result || "-")}</span>
+        <h3 class="card-title">${escapeHtml(candidateName)}</h3>
+        <p class="card-sub">${escapeHtml(electionType)} · ${escapeHtml(electionTitle)}</p>
+        <p class="card-sub">정당: ${escapeHtml(row.party || "-")} · 기호: ${escapeHtml(row.candidate_number || "-")}</p>
+        <div class="card-meta">${escapeHtml(isElectText)} · 등록자: ${escapeHtml(row.created_by || "-")} · ${escapeHtml(createdAt)} 생성</div>
       </article>
     `;
     })
