@@ -45,6 +45,12 @@
 	margin: 15px 0;
 }
 
+.login-form a.is-disabled {
+	pointer-events: none;
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 .login-form button {
 	border-radius: 20px;
 	border: 1px solid #FF4B2B;
@@ -268,18 +274,32 @@
 }
 
 .login-form .social-container {
-	margin: 20px 0;
+	margin: 16px 0 12px;
+	width: 100%;
 }
 
-.login-form .social-container a {
-	border: 1px solid #DDDDDD;
-	border-radius: 50%;
-	display: inline-flex;
-	justify-content: center;
-	align-items: center;
-	margin: 0 5px;
-	height: 40px;
-	width: 40px;
+.login-form .google-auth-btn {
+	width: 100%;
+	border: 1px solid #d1d5db;
+	background: #ffffff;
+	color: #111827;
+	border-radius: 10px;
+	padding: 11px 14px;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0;
+	text-transform: none;
+	transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease-in;
+}
+
+.login-form .google-auth-btn:hover {
+	background: #f8fafc;
+	border-color: #cbd5e1;
+}
+
+.login-form .google-auth-btn:disabled {
+	opacity: 0.72;
+	cursor: not-allowed;
 }
 
 .login-form footer {

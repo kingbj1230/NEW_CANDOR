@@ -1,4 +1,4 @@
-﻿from functools import wraps
+from functools import wraps
 from dotenv import load_dotenv
 import json
 import os
@@ -16,19 +16,43 @@ from uuid import uuid4
 
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
-from pledge_tree_service import (
+from services.pledge_tree_service import (
     delete_pledge_tree as _service_delete_pledge_tree,
     fetch_node_source_rows as _service_fetch_node_source_rows,
     insert_node_source_row as _service_insert_node_source_row,
     insert_pledge_tree as _service_insert_pledge_tree,
 )
-from pledge_read_service import (
+from services.pledge_read_service import (
     attach_pledge_tree_rows as _service_attach_pledge_tree_rows,
     build_progress_node_context as _service_build_progress_node_context,
     fetch_pledge_nodes as _service_fetch_pledge_nodes,
     is_execution_method_goal_text as _service_is_execution_method_goal_text,
     normalize_compact_text as _service_normalize_compact_text,
     sorted_node_rows as _service_sorted_node_rows,
+)
+from utils.app_value_utils import (
+    _detect_image_signature,
+    _extract_missing_column_from_runtime_message,
+    _format_presidential_election_title,
+    _is_elected_result,
+    _is_leaf_node,
+    _normalize_date_only,
+    _normalize_election_round_title,
+    _normalize_fulfillment_rate,
+    _normalize_image_extension,
+    _normalize_node_source_role,
+    _normalize_parse_type,
+    _normalize_progress_rate,
+    _normalize_progress_source_role,
+    _normalize_progress_status,
+    _normalize_sort_order,
+    _normalize_source_type,
+    _normalize_structure_version,
+    _normalize_uuid,
+    _safe_int,
+    _sanitize_target_url,
+    _to_in_filter,
+    _year_from_date,
 )
 
 
@@ -246,24 +270,8 @@ def _origin_allowed(value):
     return normalized in _trusted_origins()
 
 
-def _normalize_image_extension(ext):
-    raw = str(ext or "").strip().lower()
-    if raw in {"jpeg", "jfif"}:
-        return "jpg"
-    return raw
 
 
-def _detect_image_signature(content_bytes):
-    data = content_bytes or b""
-    if data.startswith(b"\xff\xd8\xff"):
-        return "jpg", "image/jpeg"
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png", "image/png"
-    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
-        return "gif", "image/gif"
-    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "webp", "image/webp"
-    return None, None
 
 
 def _build_csp_header(nonce):
@@ -363,19 +371,6 @@ def _is_rejected_report_status(value):
     return normalized in REJECTED_REPORT_STATUS_MARKERS
 
 
-def _sanitize_target_url(raw_url):
-    text = str(raw_url or "").strip()
-    if not text:
-        return None
-    if len(text) > 2048:
-        text = text[:2048]
-    try:
-        parsed = parse.urlparse(text)
-    except Exception:
-        return None
-    if parsed.scheme in {"http", "https"}:
-        return text
-    return None
 
 
 def _pagination_params(default_limit=None, max_limit=500):
@@ -488,16 +483,6 @@ def _upload_to_supabase_storage(bucket, object_path, content_bytes, content_type
     return f"{SUPABASE_STORAGE_BASE}/object/public/{bucket}/{encoded_path}"
 
 
-def _to_in_filter(values):
-    quoted = []
-    for value in values:
-        if value is None:
-            continue
-        escaped = str(value).replace('"', r"\"")
-        quoted.append(f'"{escaped}"')
-    if not quoted:
-        return None
-    return f"in.({','.join(quoted)})"
 
 
 def _delete_pledge_tree(pledge_id):
@@ -537,38 +522,18 @@ def _fetch_candidate_election(candidate_election_id):
     return rows[0] if rows else None
 
 
-def _normalize_uuid(value):
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    return raw
 
 
-def _normalize_date_only(value, field_name="date", allow_null=True):
-    raw = str(value or "").strip()
-    if not raw:
-        if allow_null:
-            return None
-        raise ValueError(f"{field_name} is required")
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
-        raise ValueError(f"{field_name} must be YYYY-MM-DD")
-    try:
-        datetime.strptime(raw, "%Y-%m-%d")
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be a valid date") from exc
-    return raw
 
 
-def _normalize_sort_order(value):
-    if value in (None, ""):
-        return None
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        raise ValueError("sort_order must be a number")
-    if parsed < 1:
-        raise ValueError("sort_order must be greater than or equal to 1")
-    return parsed
+
+
+
+
+
+
+
+
 
 
 def _next_pledge_sort_order(candidate_election_id, exclude_pledge_id=None):
@@ -596,6 +561,17 @@ def _validate_pledge_payload(payload, current_pledge=None):
     title = (payload.get("title") or "").strip()
     raw_text = (payload.get("raw_text") or "").strip()
     category = (payload.get("category") or "").strip()
+    timeline_raw = payload.get("timeline_text", (current_pledge or {}).get("timeline_text"))
+    finance_raw = payload.get("finance_text", (current_pledge or {}).get("finance_text"))
+    parse_type_raw = payload.get("parse_type", (current_pledge or {}).get("parse_type"))
+    structure_version_raw = payload.get("structure_version", (current_pledge or {}).get("structure_version"))
+    fulfillment_rate_raw = payload.get("fulfillment_rate", (current_pledge or {}).get("fulfillment_rate"))
+
+    timeline_text = (timeline_raw or "").strip() or None
+    finance_text = (finance_raw or "").strip() or None
+    parse_type = _normalize_parse_type(parse_type_raw)
+    structure_version = _normalize_structure_version(structure_version_raw)
+    fulfillment_rate = _normalize_fulfillment_rate(fulfillment_rate_raw)
     status = (payload.get("status") or "active").strip() or "active"
     sort_order = _normalize_sort_order(payload.get("sort_order"))
 
@@ -627,6 +603,11 @@ def _validate_pledge_payload(payload, current_pledge=None):
         "title": title,
         "raw_text": raw_text,
         "category": category,
+        "timeline_text": timeline_text,
+        "finance_text": finance_text,
+        "parse_type": parse_type,
+        "structure_version": structure_version,
+        "fulfillment_rate": fulfillment_rate,
         "status": status,
     }
 
@@ -636,7 +617,7 @@ def _get_pledge_row(pledge_id):
         "GET",
         "pledges",
         query_params={
-            "select": "id,candidate_election_id,sort_order,title,raw_text,category,status,created_by",
+            "select": "id,candidate_election_id,sort_order,title,raw_text,category,timeline_text,finance_text,parse_type,structure_version,fulfillment_rate,status,created_by",
             "id": f"eq.{pledge_id}",
             "limit": "1",
         },
@@ -644,16 +625,8 @@ def _get_pledge_row(pledge_id):
     return rows[0] if rows else None
 
 
-def _is_leaf_node(value):
-    return value in (True, 1, "1", "t", "true", "True")
 
 
-def _year_from_date(value):
-    text = str(value or "").strip()
-    if len(text) < 4:
-        return None
-    year_text = text[:4]
-    return int(year_text) if year_text.isdigit() else None
 
 
 def _is_missing_column_runtime_error(exc):
@@ -721,6 +694,60 @@ def _fetch_terms_rows(candidate_filter=None, candidate_id=None, limit="5000"):
                     continue
                 raise
     return []
+
+
+def _upsert_term_for_candidate_election(*, candidate_id, election_id, position, term_start, term_end, user_id):
+    candidate_id_text = str(candidate_id or "").strip()
+    election_id_text = str(election_id or "").strip()
+    position_text = str(position or "").strip()
+    term_start_text = str(term_start or "").strip()
+    term_end_text = str(term_end or "").strip()
+
+    if not candidate_id_text or not election_id_text or not position_text or not term_start_text:
+        raise ValueError("candidate_id, election_id, position, term_start are required")
+    if term_end_text and term_end_text < term_start_text:
+        raise ValueError("term_end must be greater than or equal to term_start")
+
+    now = _now_iso()
+    existing_rows = _fetch_terms_rows(candidate_id=candidate_id_text, limit="5000")
+    target_row = None
+    for row in existing_rows:
+        if str(row.get("election_id") or "").strip() == election_id_text:
+            target_row = row
+            break
+
+    if target_row and target_row.get("id") is not None:
+        _supabase_patch_with_optional_fields(
+            "terms",
+            query_params={"id": f"eq.{target_row.get('id')}"},
+            payload={
+                "candidate_id": candidate_id_text,
+                "election_id": election_id_text,
+                "position": position_text,
+                "term_start": term_start_text,
+                "term_end": term_end_text or None,
+                "updated_at": now,
+                "updated_by": user_id,
+            },
+            optional_fields={"term_end", "updated_by"},
+        )
+        return
+
+    _supabase_request(
+        "POST",
+        "terms",
+        payload={
+            "candidate_id": candidate_id_text,
+            "election_id": election_id_text,
+            "position": position_text,
+            "term_start": term_start_text,
+            "term_end": term_end_text or None,
+            "created_at": now,
+            "created_by": user_id,
+            "updated_at": now,
+            "updated_by": None,
+        },
+    )
 
 
 def _enrich_candidates_with_latest(rows):
@@ -793,17 +820,14 @@ def _enrich_candidates_with_latest(rows):
 
         row["party"] = latest_link.get("party")
         row["position"] = latest_term.get("position")
-        row["election_title"] = election_info.get("title")
+        row["term_start"] = latest_term.get("term_start")
+        row["term_end"] = latest_term.get("term_end")
+        row["election_title"] = _format_presidential_election_title(election_info.get("title"))
         row["election_year"] = _year_from_date(election_info.get("election_date"))
 
     return rows
 
 
-def _safe_int(value, default=0):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _attach_pledge_tree_rows(pledges):
@@ -815,6 +839,7 @@ def _attach_pledge_tree_rows(pledges):
         fetch_pledge_source_rows=_fetch_pledge_source_rows,
         safe_int=_safe_int,
         is_leaf_node=_is_leaf_node,
+        is_missing_schema_runtime_error=_is_missing_schema_runtime_error,
     )
 
 
@@ -834,10 +859,32 @@ def _sorted_node_rows(rows):
 
 
 def _fetch_pledge_nodes(pledge_id):
-    return _service_fetch_pledge_nodes(
-        pledge_id,
-        supabase_request=_supabase_request,
-    ) or []
+    pledge_id_text = str(pledge_id or "").strip()
+    if not pledge_id_text:
+        return []
+    try:
+        return _supabase_get_with_select_fallback(
+            "pledge_nodes",
+            query_params={
+                "pledge_id": f"eq.{pledge_id_text}",
+                "limit": "50000",
+                "order": "sort_order.asc.nullslast,created_at.asc,id.asc",
+            },
+            select_candidates=[
+                "id,pledge_id,node_type,name,content,level,sort_order,parent_id,is_leaf,created_at",
+                "id,pledge_id,node_type,name,content,level,sort_order,parent_id,created_at",
+                "id,pledge_id,node_type,name,content,level,sort_order,parent_id",
+                "id,pledge_id,node_type,name,content,level,parent_id",
+                "id,pledge_id,name,content,level,parent_id,sort_order,created_at",
+                "id,pledge_id,name,content,parent_id,sort_order,created_at",
+                "id,pledge_id,name,content,parent_id",
+                "*",
+            ],
+        )
+    except RuntimeError as exc:
+        if _is_missing_schema_runtime_error(exc):
+            return []
+        raise
 
 
 def _build_progress_node_context(node_rows):
@@ -850,124 +897,43 @@ def _build_progress_node_context(node_rows):
 
 
 def _get_pledge_node(pledge_node_id):
-    rows = _supabase_request(
-        "GET",
-        "pledge_nodes",
-        query_params={
-            "select": "id,pledge_id,name,content,parent_id,is_leaf,sort_order,created_at",
-            "id": f"eq.{pledge_node_id}",
-            "limit": "1",
-        },
-    ) or []
+    pledge_node_id_text = str(pledge_node_id or "").strip()
+    if not pledge_node_id_text:
+        return None
+    try:
+        rows = _supabase_get_with_select_fallback(
+            "pledge_nodes",
+            query_params={
+                "id": f"eq.{pledge_node_id_text}",
+                "limit": "1",
+            },
+            select_candidates=[
+                "id,pledge_id,node_type,name,content,parent_id,is_leaf,sort_order,created_at",
+                "id,pledge_id,node_type,name,content,parent_id,sort_order,created_at",
+                "id,pledge_id,node_type,name,content,parent_id,sort_order",
+                "id,pledge_id,node_type,name,content,parent_id",
+                "id,pledge_id,name,content,parent_id,is_leaf,sort_order,created_at",
+                "id,pledge_id,name,content,parent_id,sort_order,created_at",
+                "id,pledge_id,name,content,parent_id",
+                "id,pledge_id",
+                "*",
+            ],
+        )
+    except RuntimeError as exc:
+        if _is_missing_schema_runtime_error(exc):
+            return None
+        raise
     return rows[0] if rows else None
 
 
-def _resolve_default_source_target_node_id(pledge_id):
-    pledge_key = str(pledge_id or "").strip()
-    if not pledge_key:
-        return None
-
-    rows = _sorted_node_rows(_fetch_pledge_nodes(pledge_key))
-    if not rows:
-        return None
-
-    root_rows = [row for row in rows if row.get("parent_id") is None]
-    goal_roots = [row for row in root_rows if str(row.get("name") or "").strip().lower() == "goal"]
-
-    for candidate in goal_roots + root_rows + rows:
-        node_id = candidate.get("id")
-        if node_id is not None:
-            return str(node_id)
-    return None
 
 
-def _normalize_progress_rate(value):
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        raise ValueError("progress_rate must be a number")
-    if parsed < 0 or parsed > 5:
-        raise ValueError("progress_rate must be between 0 and 5")
-    scaled = parsed * 2
-    if abs(round(scaled) - scaled) > 1e-9:
-        raise ValueError("progress_rate must be in 0.5 increments")
-    return round(scaled) / 2
 
 
-def _normalize_progress_status(value):
-    allowed = {"not_started", "in_progress", "partially_completed", "completed", "failed", "unknown"}
-    status = str(value or "unknown").strip().lower() or "unknown"
-    if status not in allowed:
-        raise ValueError("status must be one of not_started, in_progress, partially_completed, completed, failed, unknown")
-    return status
 
 
-def _normalize_source_type(value):
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-
-    compact = raw.lower().replace(" ", "").replace("_", "").replace("-", "")
-    mapping = {
-        "government": "정부",
-        "정부": "정부",
-        "news": "언론",
-        "언론": "언론",
-        "report": "보고서",
-        "보고서": "보고서",
-        "research": "연구",
-        "연구": "연구",
-        "budget": "예산",
-        "예산": "예산",
-        "pressrelease": "보도자료",
-        "보도자료": "보도자료",
-        "speech": "연설",
-        "연설": "연설",
-        "law": "법령",
-        "법": "법령",
-        "법령": "법령",
-    }
-    return mapping.get(compact, raw)
 
 
-def _normalize_progress_source_role(value):
-    raw = str(value or "").strip()
-    compact = raw.lower().replace(" ", "").replace("_", "").replace("-", "")
-    mapping = {
-        "primary": "주요근거",
-        "주요근거": "주요근거",
-        "supporting": "보조근거",
-        "보조근거": "보조근거",
-        "counter": "반박자료",
-        "반박자료": "반박자료",
-    }
-    normalized = mapping.get(compact)
-    if not normalized:
-        raise ValueError("source_role must be one of 주요근거, 보조근거, 반박자료")
-    return normalized
-
-
-def _normalize_node_source_role(value):
-    raw = str(value or "").strip()
-    if not raw:
-        return "참고출처"
-    compact = raw.lower().replace(" ", "").replace("_", "").replace("-", "")
-    mapping = {
-        "origin": "원문출처",
-        "원문출처": "원문출처",
-        "공식공약집": "원문출처",
-        "공식공약": "원문출처",
-        "reference": "참고출처",
-        "참고출처": "참고출처",
-        "보조근거": "참고출처",
-        "보조출처": "참고출처",
-        "참고출처자료": "참고출처",
-        "related": "관련자료",
-        "관련자료": "관련자료",
-        "관련출처": "관련자료",
-    }
-    normalized = mapping.get(compact)
-    return normalized or raw
 
 
 def _ensure_source_exists(source_id):
@@ -1126,24 +1092,6 @@ def _supabase_patch_with_optional_fields(table, query_params, payload, optional_
             remaining.remove(column)
 
 
-def _extract_missing_column_from_runtime_message(message):
-    text = str(message or "")
-    patterns = [
-        r"column\s+([A-Za-z0-9_\.\"']+)\s+does not exist",
-        r"column\s+([A-Za-z0-9_\.\"']+)\s+of relation\s+([A-Za-z0-9_\.\"']+)\s+does not exist",
-        r"could not find the ['\"]([A-Za-z0-9_]+)['\"] column",
-        r"schema cache.*?['\"]([A-Za-z0-9_]+)['\"]\s+column",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if not match:
-            continue
-        column = str(match.group(1) or "").strip("'\"")
-        if "." in column:
-            column = column.split(".")[-1]
-        if column:
-            return column
-    return None
 
 
 def _fetch_latest_progress_row(pledge_node_id):
@@ -1226,19 +1174,65 @@ def _try_fetch_user_profile(user_id):
 
 
 def ensure_user_profile(user_id, email):
-    if _try_fetch_user_profile(user_id):
+    normalized_user_id = str(user_id or "").strip()
+    if not normalized_user_id:
         return
 
-    payload = {
-        "user__id": user_id,
-        "nickname": (email or "").split("@")[0] or f"user_{user_id[:8]}",
-        "role": "user",
-        "status": "active",
-        "reputation_score": 0,
-        "create_at": _now_iso(),
-        "update_at": _now_iso(),
+    if _try_fetch_user_profile(normalized_user_id):
+        return
+
+    nickname = (str(email or "").split("@")[0] or f"user_{normalized_user_id[:8]}").strip()
+    now_iso = _now_iso()
+    optional_fields = {
+        "nickname",
+        "role",
+        "status",
+        "reputation_score",
+        "create_at",
+        "update_at",
+        "created_at",
+        "updated_at",
     }
-    _supabase_request("POST", "user_profiles", payload=payload)
+    last_error = None
+
+    for id_column in ("user__id", "user_id"):
+        payload = {
+            id_column: normalized_user_id,
+            "nickname": nickname,
+            "role": "user",
+            "status": "active",
+            "reputation_score": 0,
+            # user_profiles 스키마가 혼재되어 있어 타임스탬프 컬럼명을 모두 시도한다.
+            "create_at": now_iso,
+            "update_at": now_iso,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+
+        try:
+            _supabase_insert_with_optional_fields(
+                "user_profiles",
+                payload,
+                optional_fields=optional_fields,
+            )
+            return
+        except RuntimeError as exc:
+            message = str(exc or "")
+            lowered = message.lower()
+            if "duplicate key value violates unique constraint" in lowered or "already exists" in lowered:
+                return
+            if _is_network_runtime_error(exc):
+                raise
+
+            missing_column = _extract_missing_column_from_runtime_message(message)
+            if missing_column and missing_column == id_column:
+                last_error = exc
+                continue
+
+            last_error = exc
+
+    if last_error:
+        raise last_error
 
 
 def _session_user_id():
@@ -1432,13 +1426,30 @@ def inject_template_flags():
 
 
 
-# Route modules split by responsibility
-import routes_select  # noqa: F401
-import routes_delete  # noqa: F401
-import routes_update  # noqa: F401
-import routes_misc  # noqa: F401
+# Route modules split by domain.
+import routes.pages  # noqa: F401
+import routes.auth  # noqa: F401
+import routes.candidate  # noqa: F401
+import routes.candidate_admin  # noqa: F401
+import routes.election  # noqa: F401
+import routes.pledge  # noqa: F401
+import routes.progress  # noqa: F401
+import routes.report  # noqa: F401
+import routes.static_pages  # noqa: F401
+import routes.admin_common  # noqa: F401
 
-_ROUTE_MODULE_NAMES = ("routes_select", "routes_delete", "routes_update", "routes_misc")
+_ROUTE_MODULE_NAMES = (
+    "routes.pages",
+    "routes.auth",
+    "routes.candidate",
+    "routes.candidate_admin",
+    "routes.election",
+    "routes.pledge",
+    "routes.progress",
+    "routes.report",
+    "routes.static_pages",
+    "routes.admin_common",
+)
 
 
 def _sync_route_module_bindings():

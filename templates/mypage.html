@@ -3,7 +3,7 @@
 {% block title %}마이페이지{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/mypage.css', v='20260313b') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/mypage.css', v='20260326r1') }}">
 {% endblock %}
 
 {% block main %}
@@ -31,10 +31,12 @@
             <h2>내 공약</h2>
             <p id="summaryPledgeCount">0</p>
         </article>
-        <article class="summary-card">
+        {% if is_admin_user %}
+        <article id="summaryRoleCard" class="summary-card">
             <h2>권한</h2>
             <p id="summaryRole">-</p>
         </article>
+        {% endif %}
         <article id="summaryReportCard" class="summary-card" hidden>
             <h2>신고함</h2>
             <p id="summaryReportCount">0</p>
@@ -64,6 +66,7 @@
                     <dt>이메일</dt>
                     <dd id="profileEmail">-</dd>
                 </div>
+                {% if is_admin_user %}
                 <div>
                     <dt>권한</dt>
                     <dd><span id="profileRole" class="role-badge">-</span></dd>
@@ -72,6 +75,7 @@
                     <dt>상태</dt>
                     <dd id="profileStatus">-</dd>
                 </div>
+                {% endif %}
                 <div>
                     <dt>가입일</dt>
                     <dd id="profileCreatedAt">-</dd>
@@ -81,6 +85,15 @@
                     <dd id="profileReputation">-</dd>
                 </div>
             </dl>
+
+            <form id="profileNicknameForm" class="profile-edit-form">
+                <label for="profileNicknameInput">닉네임 수정</label>
+                <div class="profile-edit-row">
+                    <input id="profileNicknameInput" type="text" minlength="2" maxlength="30" placeholder="2~30자 닉네임">
+                    <button id="profileNicknameSaveBtn" type="submit" class="mypage-action-btn">저장</button>
+                </div>
+                <p class="profile-edit-help">닉네임은 2~30자로 입력해 주세요.</p>
+            </form>
         </article>
     </section>
 
@@ -162,5 +175,5 @@
     </div>
 </section>
 
-<script src="{{ url_for('static', filename='js/mypage.js', v='20260315r1') }}"></script>
+<script src="{{ url_for('static', filename='js/mypage.js', v='20260326r1') }}"></script>
 {% endblock %}

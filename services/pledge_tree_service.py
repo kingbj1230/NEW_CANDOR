@@ -1,63 +1,272 @@
 import re
 
 
+_SECTION_GOAL = "goal"
+_SECTION_METHOD = "method"
+_SECTION_TIMELINE = "timeline"
+_SECTION_FINANCE = "finance"
+
+_TYPE1_RE = re.compile(r"[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]")
+_CIRCLED_NUMBER_RE = re.compile(r"^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]")
+
+_SECTION_LABELS = {
+    _SECTION_GOAL: ("목표", "비전", "핵심 목표", "핵심목표", "추진 목표", "추진목표"),
+    _SECTION_METHOD: ("이행방법", "이행 방법", "이행방안", "실천방안", "추진전략", "추진 전략", "세부실천", "세부 실행"),
+    _SECTION_TIMELINE: ("이행기간", "이행 기간", "추진일정", "추진 일정"),
+    _SECTION_FINANCE: ("재원조달방안", "재원 조달 방안", "재원조달", "재원 대책", "재원대책"),
+}
+
+_GOAL_SECTION_TITLE = "목표"
+_METHOD_SECTION_TITLE = "이행 방법"
+
+
+def _clean_text(value):
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _collapse_spaces(value):
+    return re.sub(r"\s+", "", str(value or "")).strip()
+
+
+def _leading_spaces(line):
+    match = re.match(r"^\s*", str(line or ""))
+    return len(match.group(0)) if match else 0
+
+
+def _starts_with_circled_number(line):
+    return bool(_CIRCLED_NUMBER_RE.match(str(line or "").strip()))
+
+
+def _detect_marker(trimmed_line):
+    line = str(trimmed_line or "").strip()
+    if not line:
+        return "plain"
+    if re.match(r"^(?:□|○|◯)\s+", line):
+        return "circle"
+    if _starts_with_circled_number(line):
+        return "circled"
+    if re.match(r"^\d+[.)]\s+", line):
+        return "number"
+    if re.match(r"^[-·•▪◦*]\s+", line):
+        return "bullet"
+    return "plain"
+
+
+def _strip_marker(trimmed_line):
+    line = str(trimmed_line or "").strip()
+    line = re.sub(r"^(?:□|○|◯)\s+", "", line)
+    line = re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]\s*", "", line)
+    line = re.sub(r"^\d+[.)]\s+", "", line)
+    line = re.sub(r"^[-·•▪◦*]\s+", "", line)
+    return _clean_text(line)
+
+
+def _normalize_section_header(line):
+    compact = _collapse_spaces(line)
+    return re.sub(r"[\[\]\(\):：\-]", "", compact)
+
+
+def _detect_section(line):
+    compact = _normalize_section_header(line)
+    if not compact:
+        return None
+
+    for section_name, labels in _SECTION_LABELS.items():
+        for label in labels:
+            normalized = _collapse_spaces(label)
+            if compact == normalized or compact.startswith(normalized):
+                return section_name
+    return None
+
+
+def _detect_parse_type(text):
+    raw = str(text or "")
+    if _TYPE1_RE.search(raw):
+        return "type1"
+    if re.search(r"(^|\n)\s*[□○◯]", raw):
+        return "type2"
+    return "type3"
+
+
+def _parse_pledge_text(text):
+    raw = str(text or "").replace("\r\n", "\n")
+    parse_type = _detect_parse_type(raw)
+    result = {
+        "parse_type": parse_type,
+        "goals": [],
+        "strategies": [],
+        "timeline": [],
+        "finance": [],
+        "warnings": [],
+    }
+
+    current_section = None
+    current_strategy = None
+    current_strategy_indent = 0
+
+    for raw_line in raw.split("\n"):
+        trimmed = str(raw_line or "").strip()
+        if not trimmed:
+            continue
+
+        section = _detect_section(trimmed)
+        if section:
+            current_section = section
+            if section != _SECTION_METHOD:
+                current_strategy = None
+                current_strategy_indent = 0
+            continue
+
+        if not current_section:
+            current_section = _SECTION_METHOD
+
+        if current_section == _SECTION_GOAL:
+            value = _strip_marker(trimmed)
+            if value:
+                result["goals"].append(value)
+            continue
+
+        if current_section == _SECTION_TIMELINE:
+            value = _strip_marker(trimmed)
+            if value:
+                result["timeline"].append(value)
+            continue
+
+        if current_section == _SECTION_FINANCE:
+            value = _strip_marker(trimmed)
+            if value:
+                result["finance"].append(value)
+            continue
+
+        indent = _leading_spaces(raw_line)
+        marker = _detect_marker(trimmed)
+        content = _strip_marker(trimmed)
+        if not content:
+            continue
+
+        is_strategy_by_marker = marker in {"circle", "circled", "number"}
+        is_action_by_marker = marker == "bullet"
+
+        if not current_strategy:
+            current_strategy = {"title": content, "actions": []}
+            current_strategy_indent = indent
+            result["strategies"].append(current_strategy)
+            continue
+
+        if is_strategy_by_marker:
+            current_strategy = {"title": content, "actions": []}
+            current_strategy_indent = indent
+            result["strategies"].append(current_strategy)
+            continue
+
+        if is_action_by_marker or indent > current_strategy_indent:
+            current_strategy["actions"].append(content)
+            continue
+
+        if parse_type == "type3":
+            current_strategy = {"title": content, "actions": []}
+            current_strategy_indent = indent
+            result["strategies"].append(current_strategy)
+            continue
+
+        current_strategy["actions"].append(content)
+
+    if not result["goals"]:
+        result["warnings"].append("목표 섹션이 비어 있습니다.")
+    if not result["strategies"]:
+        result["warnings"].append("이행 방법(strategy) 섹션이 비어 있습니다.")
+
+    return result
+
+
+def _build_tree_nodes(parsed):
+    nodes = []
+
+    def _append_node(*, node_type, level, content, parent_index):
+        text = _clean_text(content)
+        if not text:
+            return None
+        node = {
+            "node_type": node_type,
+            "level": level,
+            "content": text,
+            "name": text[:120],
+            "parent_index": parent_index,
+            "has_child": False,
+        }
+        index = len(nodes)
+        nodes.append(node)
+        if parent_index is not None and 0 <= parent_index < len(nodes):
+            nodes[parent_index]["has_child"] = True
+        return index
+
+    goals = parsed.get("goals") or []
+    strategies = parsed.get("strategies") or []
+
+    if goals:
+        goal_root_index = _append_node(
+            node_type="goal",
+            level=1,
+            content=_GOAL_SECTION_TITLE,
+            parent_index=None,
+        )
+        for goal_line in goals:
+            _append_node(
+                node_type="strategy",
+                level=2,
+                content=goal_line,
+                parent_index=goal_root_index,
+            )
+
+    if strategies:
+        method_root_index = _append_node(
+            node_type="goal",
+            level=1,
+            content=_METHOD_SECTION_TITLE,
+            parent_index=None,
+        )
+        for strategy in strategies:
+            strategy_index = _append_node(
+                node_type="strategy",
+                level=2,
+                content=strategy.get("title"),
+                parent_index=method_root_index,
+            )
+            for action in strategy.get("actions") or []:
+                _append_node(
+                    node_type="action",
+                    level=3,
+                    content=action,
+                    parent_index=strategy_index,
+                )
+
+    return nodes
+
+
 def _parse_pledges_text(text):
+    parsed = _parse_pledge_text(text)
     goals = []
-    current_goal = None
-    current_promise = None
-    current_item = None
 
-    parts = [p for p in re.split(r"(□ |○ |- )", text or "") if (p or "").strip()]
-    i = 0
-    while i < len(parts):
-        part = parts[i]
-
-        if part == "□ ":
-            if i + 1 >= len(parts):
-                break
-            title = parts[i + 1].strip()
-            current_goal = {"title": title, "promises": []}
-            goals.append(current_goal)
-            current_promise = None
-            current_item = None
-            i += 2
-            continue
-
-        if part == "○ ":
-            if not current_goal:
-                i += 2
-                continue
-            if i + 1 >= len(parts):
-                break
-            title = parts[i + 1].strip()
-            current_promise = {"title": title, "items": []}
-            current_goal["promises"].append(current_promise)
-            current_item = None
-            i += 2
-            continue
-
-        if part == "- ":
-            if not current_promise:
-                i += 2
-                continue
-            if i + 1 >= len(parts):
-                break
-            detail = parts[i + 1].strip()
-            current_item = {"detail": detail}
-            current_promise["items"].append(current_item)
-            i += 2
-            continue
-
-        content = part.strip()
-        if content:
-            if current_item:
-                current_item["detail"] = f"{current_item['detail']} {content}".strip()
-            elif current_promise:
-                current_promise["title"] = f"{current_promise['title']} {content}".strip()
-            elif current_goal:
-                current_goal["title"] = f"{current_goal['title']} {content}".strip()
-        i += 1
-
+    if parsed.get("goals"):
+        goals.append(
+            {
+                "title": _GOAL_SECTION_TITLE,
+                "promises": [{"title": item, "items": []} for item in parsed["goals"]],
+            }
+        )
+    if parsed.get("strategies"):
+        goals.append(
+            {
+                "title": _METHOD_SECTION_TITLE,
+                "promises": [
+                    {
+                        "title": strategy.get("title"),
+                        "items": [{"detail": action} for action in (strategy.get("actions") or [])],
+                    }
+                    for strategy in parsed["strategies"]
+                ],
+            }
+        )
     return goals
 
 
@@ -376,80 +585,47 @@ def insert_pledge_tree(
     supabase_insert_returning,
     supabase_request,
 ):
-    goals = _parse_pledges_text(raw_text or "")
+    parsed = _parse_pledge_text(raw_text or "")
+    parsed_nodes = _build_tree_nodes(parsed)
     now = now_iso_fn()
 
-    for goal_idx, goal in enumerate(goals, start=1):
-        goal_text = str(goal.get("title") or "").strip()
-        if not goal_text:
+    inserted_ids = []
+    order_by_parent = {}
+
+    for node in parsed_nodes:
+        parent_index = node.get("parent_index")
+        parent_id = inserted_ids[parent_index] if parent_index is not None and parent_index < len(inserted_ids) else None
+        parent_key = str(parent_id) if parent_id is not None else "__root__"
+        next_sort_order = order_by_parent.get(parent_key, 0) + 1
+        order_by_parent[parent_key] = next_sort_order
+
+        level = max(1, min(int(node.get("level") or 1), 3))
+        node_type = str(node.get("node_type") or "").strip().lower() or (
+            "goal" if level == 1 else ("strategy" if level == 2 else "action")
+        )
+        node_name = _clean_text(node.get("name") or node.get("content") or "")
+        node_content = _clean_text(node.get("content") or node_name)
+        if not node_content:
             continue
 
-        inserted_goal = supabase_insert_returning(
+        inserted_row = supabase_insert_returning(
             "pledge_nodes",
             payload={
                 "pledge_id": pledge_id,
-                "name": "goal",
-                "level": 1,
-                "content": goal_text,
-                "sort_order": goal_idx,
-                "parent_id": None,
-                "is_leaf": False,
+                "name": node_name,
+                "node_type": node_type,
+                "level": level,
+                "content": node_content,
+                "sort_order": next_sort_order,
+                "parent_id": parent_id,
+                "is_leaf": not bool(node.get("has_child")),
                 "created_at": now,
                 "created_by": created_by,
                 "updated_at": now,
                 "updated_by": None,
             },
         )
-        goal_id = inserted_goal.get("id")
-        if not goal_id:
-            continue
-
-        for promise_idx, promise in enumerate(goal.get("promises", []), start=1):
-            promise_text = str(promise.get("title") or "").strip()
-            if not promise_text:
-                continue
-
-            inserted_promise = supabase_insert_returning(
-                "pledge_nodes",
-                payload={
-                    "pledge_id": pledge_id,
-                    "name": "promise",
-                    "level": 2,
-                    "content": promise_text,
-                    "sort_order": promise_idx,
-                    "parent_id": goal_id,
-                    "is_leaf": False,
-                    "created_at": now,
-                    "created_by": created_by,
-                    "updated_at": now,
-                    "updated_by": None,
-                },
-            )
-            promise_id = inserted_promise.get("id")
-            if not promise_id:
-                continue
-
-            for item_idx, item in enumerate(promise.get("items", []), start=1):
-                item_text = str(item.get("detail") or "").strip()
-                if not item_text:
-                    continue
-                supabase_request(
-                    "POST",
-                    "pledge_nodes",
-                    payload={
-                        "pledge_id": pledge_id,
-                        "name": "item",
-                        "level": 3,
-                        "content": item_text,
-                        "sort_order": item_idx,
-                        "parent_id": promise_id,
-                        "is_leaf": True,
-                        "created_at": now,
-                        "created_by": created_by,
-                        "updated_at": now,
-                        "updated_by": None,
-                    },
-                )
+        inserted_ids.append(inserted_row.get("id"))
 
 
 def fetch_node_source_rows(node_filter, *, supabase_request, is_missing_schema_runtime_error, node_source_table):
@@ -481,3 +657,4 @@ def insert_node_source_row(
         payload=payload,
         optional_fields=optional_fields or {"created_at", "created_by", "updated_at", "updated_by"},
     )
+

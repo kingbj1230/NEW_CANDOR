@@ -6,6 +6,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
 {% endblock %}
 
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/login-ui.js', v='20260326r1') }}"></script>
+{% endblock %}
+
 {% block main %}
 
 <!-- 로그인 및 회원가입 페이지 템플릿 -->
@@ -15,11 +19,9 @@
             <form id="signupForm" action="#" autocomplete="on">
                 <h1>회원가입</h1>
                 <div class="social-container">
-                    <a href="#" class="social"><i class="fab fa-facebook-f"></i></a>
-                    <a href="#" class="social"><i class="fab fa-google-plus-g"></i></a>
-                    <a href="#" class="social"><i class="fab fa-linkedin-in"></i></a>
+                    <button type="button" class="google-auth-btn" data-google-auth="signup">Google로 계속하기</button>
                 </div>
-                <span>이메일로 간편하게 가입하세요</span>
+                <span>또는 이메일로 간편하게 가입하세요</span>
                 <input type="text" id="signupName" name="name" placeholder="이름" autocomplete="name">
                 <input type="email" id="signupEmail" name="email" placeholder="이메일" autocomplete="email" required>
                 <div class="password-field">
@@ -38,11 +40,9 @@
             <form id="loginForm" action="#" autocomplete="on">
                 <h1>로그인</h1>
                 <div class="social-container">
-                    <a href="#" class="social"><i class="fab fa-facebook-f"></i></a>
-                    <a href="#" class="social"><i class="fab fa-google-plus-g"></i></a>
-                    <a href="#" class="social"><i class="fab fa-linkedin-in"></i></a>
+                    <button type="button" class="google-auth-btn" data-google-auth="signin">Google로 로그인</button>
                 </div>
-                <span>가입한 계정으로 로그인하세요</span>
+                <span>또는 가입한 계정으로 로그인하세요</span>
                 <input type="email" id="loginEmail" name="username" placeholder="이메일" autocomplete="username" required>
                 <div class="password-field">
                     <input type="password" id="loginPassword" name="password" placeholder="비밀번호" autocomplete="current-password" required>
@@ -52,7 +52,7 @@
                     <input type="checkbox" id="loginRememberLogin">
                     <span>이메일/비밀번호 기억하기</span>
                 </label>
-                <a href="#">비밀번호를 잊으셨나요?</a>
+                <a href="#" data-forgot-password>비밀번호를 잊으셨나요?</a>
                 <button type="submit">로그인</button>
             </form>
         </div>

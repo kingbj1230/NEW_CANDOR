@@ -1,176 +1,297 @@
 ﻿{% extends "layout.html" %}
 
-{% block title %}&#44277;&#50557; &#46321;&#47197;{% endblock %}
+{% block title %}공약 등록{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pledge.css', v='20260313r3') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pledge.css', v='20260326r2') }}">
 {% endblock %}
 
 {% block main %}
 <section class="pledge-shell">
-    <div class="pledge-hero">
-        <h1>&#44277;&#50557; &#46321;&#47197;</h1>
-        <p>탭 형태로 공약을 등록할 수 있습니다.</p>
-    </div>
+  <header class="pledge-hero">
+    <h1>공약 등록</h1>
+    <p class="feedback-note">피드백을 받고 있으니 편하게 문의해주세요.</p>
+  </header>
 
-    <div id="pledgeMessage" class="pledge-message" aria-live="polite"></div>
-    <div class="pledge-top-tabs">
-        <div class="editor-mode-switch" role="tablist" aria-label="공약 작성 방식">
-            <button type="button" class="editor-mode-tab active" data-editor-mode="paste" aria-selected="true">구조형 입력</button>
-            <button type="button" class="editor-mode-tab" data-editor-mode="guided" aria-selected="false">자유 작성</button>
+  <div id="pledgeMessage" class="pledge-message" aria-live="polite"></div>
+
+  <div class="pledge-editor-switch" role="tablist" aria-label="공약 입력 방식">
+    <button type="button" class="editor-switch-btn active" data-editor-tab-target="free" aria-selected="true">자유 작성</button>
+    <button type="button" class="editor-switch-btn" data-editor-tab-target="structured" aria-selected="false">단계별 입력</button>
+  </div>
+
+  <div class="pledge-grid">
+    <form id="pledgeForm" class="pledge-form">
+      <h2>공약 입력</h2>
+
+      <div class="pledge-meta-grid">
+        <div>
+          <label for="pledgeElectionId">선거</label>
+          <select id="pledgeElectionId" required>
+            <option value="">선거를 먼저 선택해 주세요</option>
+          </select>
         </div>
-    </div>
 
-    <div class="pledge-grid">
-        <form id="pledgeForm" class="pledge-form pledge-editor-form">
-            <div class="editor-form-head">
-                <div>
-                    <p class="builder-kicker">&#44277;&#50557; &#51089;&#49457;</p>
-                    <h2>공약 등록</h2>
-                </div>
-            </div>
-
-            <div class="pledge-meta-grid">
-                <div>
-                    <label for="candidateElectionId">&#54980;&#48372;&#51088; &#47588;&#52845;</label>
-                    <select id="candidateElectionId" required>
-                        <option value="">&#54980;&#48372;&#51088;-&#49440;&#44144;&#47484; &#49440;&#53469;&#54616;&#49464;&#50836;</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="pledgeTitle">&#44277;&#50557; &#51228;&#47785;</label>
-                    <input id="pledgeTitle" type="text" required placeholder="&#50696;: &#52397;&#45380; &#51452;&#44144; &#51648;&#50896; &#54869;&#45824;">
-                </div>
-                <div>
-                    <label for="pledgeCategory">&#52852;&#53580;&#44256;&#47532;</label>
-                    <input id="pledgeCategory" type="text" required placeholder="&#50696;: &#44221;&#51228;, &#48373;&#51648;, &#44368;&#50977;, &#44368;&#53685;">
-                </div>
-                <div>
-                    <label for="pledgeSortOrder">&#44277;&#50557; &#51221;&#47148; &#49692;&#49436;</label>
-                    <input id="pledgeSortOrder" type="number" min="1" placeholder="&#48708;&#50864;&#47732; &#51088;&#46041; &#48176;&#51221;">
-                </div>
-            </div>
-
-            <section class="editor-panel admin-panel is-active" data-editor-panel="paste">
-                <textarea id="pledgeRawTextPlain" hidden></textarea>
-
-                <div class="blog-builder-grid">
-                    <article class="blog-compose-card">
-                        <h3>구조 추가</h3>
-                        <div class="blog-unified-form">
-                            <div class="blog-field">
-                                <label for="blogNodeType">유형</label>
-                                <select id="blogNodeType">
-                                    <option value="goal">대항목</option>
-                                    <option value="promise">중항목</option>
-                                    <option value="item">세부항목</option>
-                                </select>
-                            </div>
-                            <div id="blogGoalTypeField" class="blog-field">
-                                <label for="blogGoalType">대항목 구분</label>
-                                <select id="blogGoalType">
-                                    <option value="목표">목표</option>
-                                    <option value="이행 방법">이행 방법</option>
-                                    <option value="이행기간">이행기간</option>
-                                    <option value="재원조달방안">재원조달방안</option>
-                                </select>
-                            </div>
-                            <div id="blogParentGoalField" class="blog-field" hidden>
-                                <label for="blogParentGoalSelect">상위 대항목</label>
-                                <select id="blogParentGoalSelect">
-                                    <option value="">먼저 대항목을 등록해 주세요</option>
-                                </select>
-                            </div>
-                            <div id="blogParentPromiseField" class="blog-field" hidden>
-                                <label for="blogParentPromiseSelect">상위 중항목</label>
-                                <select id="blogParentPromiseSelect">
-                                    <option value="">먼저 중항목을 등록해 주세요</option>
-                                </select>
-                            </div>
-                            <div id="blogNodeTextField" class="blog-field blog-field-grow" hidden>
-                                <label for="blogNodeText">내용</label>
-                                <input id="blogNodeText" type="text" placeholder="내용을 입력하세요">
-                            </div>
-                            <button id="addBlogNodeBtn" type="button">추가</button>
-                        </div>
-                    </article>
-                </div>
-
-                <div class="blog-tree-card">
-                    <div class="editor-textarea-head">
-                        <label>현재 작성 구조</label>
-                    </div>
-                    <div id="blogStructureTree" class="blog-structure-tree"></div>
-                </div>
-            </section>
-
-            <section class="editor-panel admin-panel" data-editor-panel="guided" hidden>
-                <div class="editor-workspace">
-                    <div class="editor-toolbar-card">
-                        <div id="editorToolbar" class="editor-toolbar">
-                            <button type="button" class="editor-tool goal" data-goal-menu-toggle="true" aria-haspopup="true" aria-expanded="false">
-                                <span class="tool-symbol">&#9633;</span>
-                                <span class="tool-copy">
-                                    <strong>목 표</strong>
-                                </span>
-                            </button>
-                            <button type="button" class="editor-tool promise" data-insert-token="&#9675; " data-insert-mode="line">
-                                <span class="tool-symbol">&#9675;</span>
-                                <span class="tool-copy">
-                                    <strong>&#49464;&#48512; &#44277;&#50557;</strong>
-                                </span>
-                            </button>
-                            <button type="button" class="editor-tool item" data-insert-token="- " data-insert-mode="line">
-                                <span class="tool-symbol">-</span>
-                                <span class="tool-copy">
-                                    <strong>&#49892;&#54665; &#54637;&#47785;</strong>
-                                </span>
-                            </button>
-                        </div>
-                        <div id="goalOptionMenu" class="goal-option-menu" hidden>
-                            <button type="button" class="goal-option-btn" data-goal-option="목 표">목 표</button>
-                            <button type="button" class="goal-option-btn" data-goal-option="이행 방법">이행 방법</button>
-                            <button type="button" class="goal-option-btn" data-goal-option="이행기간">이행기간</button>
-                            <button type="button" class="goal-option-btn" data-goal-option="재원조달방안">재원조달방안</button>
-                            <button type="button" class="goal-option-btn" data-goal-option="기타">기타 (직접 입력)</button>
-                        </div>
-                    </div>
-                </div>
-                <div id="editorValidationMessage" class="editor-validation-message" hidden></div>
-                <div class="editor-textarea-wrap">
-                    <div class="editor-textarea-head">
-                        <label for="pledgeRawTextGuided">&#44277;&#50557; &#48376;&#47928;</label>
-                    </div>
-                    <textarea id="pledgeRawTextGuided" rows="18" placeholder="&#50696;&#49884;&#10;&#10;&#9633; &#52397;&#45380; &#51452;&#44144; &#50504;&#51221;&#51012; &#50948;&#54620; &#51228;&#46020; &#44060;&#54200;&#10;&#10;&#9675; &#51204;&#49464;&#44552; &#44552;&#50997; &#51648;&#50896; &#54869;&#45824;&#10;- &#52397;&#45380; &#51204;&#49464;&#51088;&#44552; &#51648;&#50896; &#54620;&#46020; &#49345;&#54693;&#10;- &#51109;&#44592; &#44256;&#51221;&#44552;&#47532; &#49345;&#54408; &#46020;&#51077;&#10;&#10;&#9675; &#44277;&#44277;&#51076;&#45824; &#44277;&#44553; &#54869;&#45824;&#10;- &#50669;&#49464;&#44428; &#44277;&#44553; &#47932;&#47049; &#54869;&#45824;&#10;- &#49888;&#54844;&#48512;&#48512; &#50864;&#49440; &#48176;&#51221; &#44053;&#54868;"></textarea>
-                </div>
-            </section>
-
-            <section class="pledge-source-card">
-                <div class="pledge-source-head">
-                    <div>
-                        <p class="source-kicker">공약 출처</p>
-                        <h3>공약 출처 남기기</h3>
-                    </div>
-                    <button id="addPledgeSourceBtn" type="button" class="source-add-btn">출처 추가</button>
-                </div>
-                <p class="source-help">출처는 공약(pledges.id) 또는 대항목(goal) 기준으로 연결할 수 있습니다. goal 연결을 선택하면 모든 대항목(goal)에 각각 출처를 지정해야 하며, 기존 출처 재사용은 같은 후보-선거의 기존 공약 출처에서 선택할 수 있습니다.</p>
-                <div id="pledgeSourceList" class="pledge-source-list"></div>
-            </section>
-
-            <div class="pledge-form-actions">
-                <button id="savePledgeBtn" type="submit">&#44277;&#50557; &#51200;&#51109;</button>
-            </div>
-        </form>
-
-    </div>
-
-    <div id="pledgeLoading" class="pledge-loading" hidden>
-        <div class="pledge-loading-card" role="status" aria-live="polite">
-            <div class="pledge-spinner" aria-hidden="true"></div>
-            <p id="pledgeLoadingText">&#52376;&#47532; &#51473;&#51077;&#45768;&#45796;. &#51104;&#49884;&#47564; &#44592;&#45796;&#47140; &#51452;&#49464;&#50836;...</p>
+        <div>
+          <label for="pledgeCandidateSearch">선거 후보자 찾기</label>
+          <div class="candidate-search-field">
+            <input
+              id="pledgeCandidateSearch"
+              type="text"
+              autocomplete="off"
+              placeholder="선거를 먼저 선택해 주세요"
+              disabled>
+            <div id="pledgeCandidateSearchDropdown" class="candidate-search-dropdown" role="listbox" hidden></div>
+          </div>
+          <input id="candidateElectionId" type="hidden">
+          <p id="pledgeCandidateSearchHelp" class="form-help compact">선거를 먼저 선택한 뒤 후보자를 검색해 주세요.</p>
         </div>
+
+        <div>
+          <label for="pledgeTitle">공약 제목</label>
+          <input id="pledgeTitle" type="text" required placeholder="예: 청년 주거 안정">
+        </div>
+
+        <div>
+          <label for="pledgeCategory">카테고리</label>
+          <input id="pledgeCategory" type="text" required placeholder="예: 경제, 복지, 교육">
+        </div>
+
+        <div>
+          <label for="pledgeSortOrder">정렬 순서</label>
+          <input id="pledgeSortOrder" type="number" min="1" placeholder="비우면 자동 부여">
+        </div>
+      </div>
+
+      <section class="editor-panel is-active" data-editor-tab-panel="free">
+        <p class="form-help">
+          <a class="parser-guide-link" href="{{ url_for('pledge_paste_guide_page') }}" target="_blank" rel="noopener">어떤 파일 복사 붙여넣기를 지원하나요?</a>
+        </p>
+        <div class="raw-editor-wrap">
+          <div class="raw-editor-head">
+            <strong>자유 작성 본문</strong>
+          </div>
+          <textarea id="pledgeRawText" placeholder="예시&#10;&#10;목표&#10;- 청년 주거 안정&#10;&#10;이행방법&#10;① 전세금 지원 확대&#10;- 청년 전세자금 한도 상향&#10;- 장기 고정금리 상품 확대&#10;&#10;이행기간&#10;- 2027년까지 단계적 시행&#10;&#10;재원조달방안 등&#10;- 기존 주거기금 구조 조정"></textarea>
+        </div>
+      </section>
+
+      <section class="editor-panel" data-editor-tab-panel="structured" hidden>
+        <div class="structured-editor-wrap">
+          <div class="structured-add-panel">
+            <label for="structuredSectionType">대제목 선택</label>
+            <div class="structured-add-controls">
+              <select id="structuredSectionType">
+                <option value="goal">목표</option>
+                <option value="method">이행방법</option>
+                <option value="timeline">이행기간</option>
+                <option value="finance">재원조달방안 등</option>
+              </select>
+              <input id="structuredItemText" type="text" placeholder="추가할 내용을 입력해 주세요">
+              <button id="addStructuredItemBtn" type="button" class="secondary small">항목 추가</button>
+            </div>
+          </div>
+
+          <div class="structured-topic-stack">
+            <details class="structured-topic" data-structured-topic-card="goal" open>
+              <summary class="structured-topic-head">
+                <strong>목표</strong>
+                <span class="structured-topic-count" data-structured-topic-count="goal">0</span>
+              </summary>
+              <div class="structured-topic-body">
+                <ul class="structured-topic-list" data-structured-topic-list="goal"></ul>
+              </div>
+            </details>
+
+            <details class="structured-topic" data-structured-topic-card="method">
+              <summary class="structured-topic-head">
+                <strong>이행방법</strong>
+                <span class="structured-topic-count" data-structured-topic-count="method">0</span>
+              </summary>
+              <div class="structured-topic-body">
+                <ul class="structured-topic-list" data-structured-topic-list="method"></ul>
+              </div>
+            </details>
+
+            <details class="structured-topic" data-structured-topic-card="timeline">
+              <summary class="structured-topic-head">
+                <strong>이행기간</strong>
+                <span class="structured-topic-count" data-structured-topic-count="timeline">0</span>
+              </summary>
+              <div class="structured-topic-body">
+                <ul class="structured-topic-list" data-structured-topic-list="timeline"></ul>
+              </div>
+            </details>
+
+            <details class="structured-topic" data-structured-topic-card="finance">
+              <summary class="structured-topic-head">
+                <strong>재원조달방안 등</strong>
+                <span class="structured-topic-count" data-structured-topic-count="finance">0</span>
+              </summary>
+              <div class="structured-topic-body">
+                <ul class="structured-topic-list" data-structured-topic-list="finance"></ul>
+              </div>
+            </details>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="source-section">
+        <div class="source-head">
+          <h3>공약-출처 연결</h3>
+          <button id="addSourceRowBtn" type="button" class="secondary small">출처 추가</button>
+        </div>
+
+        <div class="source-mode" role="radiogroup" aria-label="출처 연결 모드">
+          <label><input type="radio" name="sourceLinkMode" value="basic" checked> 기본 (전체 공약)</label>
+          <label><input type="radio" name="sourceLinkMode" value="advanced"> 고급 (각 항목 세부 연결)</label>
+        </div>
+
+        <p id="sourceModeHelp" class="form-help compact">기본 모드는 전체 공약 연결입니다.</p>
+        <p id="sourceEmptyHint" class="form-help compact">출처 추가 버튼을 누르면 입력 폼이 생성됩니다.</p>
+
+        <div id="sourceSummaryBar" class="source-summary-bar" hidden>
+          <strong id="sourceCountBadge" class="source-count-badge">출처 0개</strong>
+          <div id="sourceQuickList" class="source-quick-list"></div>
+        </div>
+
+        <div id="sourceRowsContainer" class="source-rows"></div>
+
+        <template id="sourceRowTemplate">
+          <article class="source-row" data-source-row>
+            <div class="source-row-head">
+              <div class="source-row-head-main">
+                <strong data-source-label>출처</strong>
+                <span class="source-row-meta" data-source-meta>제목을 입력해 주세요</span>
+              </div>
+              <button type="button" class="secondary small" data-action="remove-source-row">삭제</button>
+            </div>
+
+            <div class="source-row-grid">
+              <label>
+                출처 제목
+                <input type="text" data-source-title placeholder="예: 제21대 대통령 선거 공약집">
+              </label>
+
+              <label>
+                URL
+                <input type="url" data-source-url placeholder="https://...">
+              </label>
+
+              <label>
+                출처 유형
+                <select data-source-type>
+                  <option value="">선택 안 함</option>
+                  <option value="정부">정부</option>
+                  <option value="언론">언론</option>
+                  <option value="보고서">보고서</option>
+                  <option value="연구">연구</option>
+                  <option value="예산">예산</option>
+                  <option value="보도자료">보도자료</option>
+                  <option value="연설">연설</option>
+                  <option value="법령">법령</option>
+                </select>
+              </label>
+
+              <label>
+                출처 역할
+                <select data-source-role>
+                  <option value="참고출처">참고출처</option>
+                  <option value="원문출처">원문출처</option>
+                  <option value="관련자료">관련자료</option>
+                </select>
+              </label>
+
+              <label>
+                발행기관
+                <input type="text" data-source-publisher placeholder="예: 중앙선거관리위원회">
+              </label>
+
+              <label>
+                발행일
+                <input type="date" data-source-published-at>
+              </label>
+            </div>
+
+            <label>
+              요약
+              <textarea class="compact-textarea" data-source-summary placeholder="출처 내용을 간단히 요약해 주세요"></textarea>
+            </label>
+
+            <label>
+              메모
+              <input type="text" data-source-note placeholder="선택 사항">
+            </label>
+
+            <div class="source-goal-target-wrap" data-goal-target-wrap hidden>
+              <label>
+                연결 항목
+                <select data-source-target-path></select>
+              </label>
+            </div>
+          </article>
+        </template>
+      </section>
+
+      <div class="pledge-form-actions">
+        <button id="parsePledgeBtn" type="button" class="secondary">구조 분석</button>
+        <button id="savePledgeBtn" type="submit">공약 저장</button>
+      </div>
+    </form>
+
+    <aside class="pledge-preview">
+      <h2>분석 결과 미리보기</h2>
+      <div class="preview-top{% if not is_admin_user %} single{% endif %}">
+        {% if is_admin_user %}
+        <div class="preview-stat">
+          <span class="label">감지된 파서 형식</span>
+          <div id="detectedType" class="value">-</div>
+        </div>
+        {% endif %}
+        <div class="preview-stat">
+          <span class="label">분석 상태</span>
+          <div id="warningText" class="value">-</div>
+        </div>
+      </div>
+
+      <section class="preview-section">
+        <h3>목표</h3>
+        <div id="goalsBox" class="preview-body"></div>
+      </section>
+
+      <section class="preview-section">
+        <h3>이행방법</h3>
+        <div id="strategiesBox" class="preview-body"></div>
+      </section>
+
+      <section class="preview-section">
+        <h3>이행기간</h3>
+        <div id="timelineBox" class="preview-body"></div>
+      </section>
+
+      <section class="preview-section">
+        <h3>재원조달방안 등</h3>
+        <div id="financeBox" class="preview-body"></div>
+      </section>
+
+      {% if is_admin_user %}
+      <section class="preview-section">
+        <h3>파싱 JSON</h3>
+        <pre id="jsonBox" class="preview-json"></pre>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+
+  <div id="pledgeLoading" class="pledge-loading" hidden>
+    <div class="pledge-loading-card" role="status" aria-live="polite">
+      <p id="pledgeLoadingText">처리 중입니다. 잠시만 기다려 주세요...</p>
     </div>
+  </div>
 </section>
 
-<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260317r2') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-parse-utils.js', v='20260326r1') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-admin-utils.js', v='20260325r3') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-admin-preview.js', v='20260326r1') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260326r1') }}"></script>
 {% endblock %}

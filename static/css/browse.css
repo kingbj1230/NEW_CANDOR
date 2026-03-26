@@ -455,8 +455,14 @@
 }
 
 .politician-pledges-head span {
-  color: #64748b;
-  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid #cad7ee;
+  background: linear-gradient(135deg, #eef3ff, #f8fbff);
+  color: #1f3f66;
+  font-weight: 800;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
 }
 
 .election-sections {
@@ -465,20 +471,37 @@
 }
 
 .election-section {
-  border: 1px solid #d9e2f1;
-  border-radius: 14px;
-  background: #fbfdff;
+  border: 1px solid #d5e1f3;
+  border-radius: 16px;
+  background: linear-gradient(170deg, #fbfdff, #f6f9ff);
   overflow: hidden;
+  box-shadow: 0 12px 24px rgba(25, 46, 84, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.election-section:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px rgba(25, 46, 84, 0.11);
 }
 
 .election-summary {
   list-style: none;
   cursor: pointer;
-  padding: 14px 16px;
+  padding: 14px 16px 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  position: relative;
+}
+
+.election-summary::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  border-bottom: 1px dashed rgba(114, 142, 189, 0.34);
 }
 
 .election-summary::-webkit-details-marker {
@@ -521,9 +544,14 @@
   background: #dfe9ff;
 }
 
+.election-count-badge {
+  border-color: #b8cbf1;
+  background: linear-gradient(130deg, #d7e5ff, #edf3ff);
+  color: #173d6f;
+}
+
 .election-section[open] .election-summary {
-  border-bottom: 1px solid #e3eaf8;
-  background: linear-gradient(135deg, #eef3ff, #f8fbff);
+  background: linear-gradient(135deg, #eaf2ff, #f7faff);
 }
 
 .election-section-body {
@@ -533,10 +561,17 @@
 }
 
 .pledge-section {
-  border: 1px solid #dce5f6;
-  border-radius: 12px;
+  border: 1px solid #d6e1f2;
+  border-radius: 14px;
   background: #ffffff;
   overflow: hidden;
+  box-shadow: 0 6px 14px rgba(20, 38, 74, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pledge-section:hover {
+  border-color: #c4d5f1;
+  box-shadow: 0 10px 18px rgba(20, 38, 74, 0.1);
 }
 
 .pledge-summary {
@@ -545,24 +580,48 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #f8fbff;
+  gap: 10px;
+  padding: 11px 13px;
+  background: linear-gradient(130deg, #f7faff, #fcfdff);
 }
 
 .pledge-summary::-webkit-details-marker {
   display: none;
 }
 
+.pledge-summary-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .pledge-summary-title {
   color: #1b2e4a;
   font-weight: 800;
   font-size: 0.96rem;
+  line-height: 1.32;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pledge-summary-sub {
+  color: #6a7b96;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.pledge-summary-tags {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .pledge-summary-info {
   border-radius: 999px;
-  border: 1px solid #d7e3f8;
+  border: 1px solid #d1def5;
   background: #edf3ff;
   color: #3b4f73;
   padding: 3px 9px;
@@ -570,12 +629,29 @@
   font-weight: 700;
 }
 
+.pledge-summary-info.is-status {
+  border-color: #bed2ee;
+  background: #e8f1ff;
+  color: #234a7b;
+}
+
+.pledge-summary-count {
+  border-radius: 999px;
+  border: 1px solid #bfd1ef;
+  background: linear-gradient(130deg, #dce8ff, #ecf3ff);
+  color: #15416f;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .pledge-section[open] .pledge-summary {
   border-bottom: 1px solid #e3ebfa;
 }
 
 .pledge-section-body {
-  padding: 10px;
+  padding: 10px 11px 11px;
+  background: linear-gradient(180deg, #ffffff, #fbfdff 55%);
 }
 
 .pledge-tree {
@@ -584,65 +660,401 @@
   gap: 10px;
 }
 
-.goal-block {
-  border: 1px solid #e1e8f8;
+.top-goal-accordion {
+  border: 1px solid #c8d9f2;
   border-radius: 12px;
-  padding: 10px 12px;
-  background: #ffffff;
+  background: #f7fbff;
+  overflow: hidden;
 }
 
-.goal-title {
+.top-goal-summary {
+  list-style: none;
+  cursor: pointer;
   margin: 0;
-  color: #1d3557;
-  font-size: 0.96rem;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #edf4ff, #f9fcff);
+  border-bottom: 1px solid transparent;
+}
+
+.top-goal-summary::-webkit-details-marker {
+  display: none;
+}
+
+.top-goal-accordion[open] .top-goal-summary {
+  border-bottom-color: #d7e4f8;
+}
+
+.top-goal-body {
+  padding: 9px 10px 10px;
+}
+
+.level-node {
+  --line-color: #cad8f1;
+  border: 1px solid #dbe5f7;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 8px 10px;
+  position: relative;
+}
+
+.level-node::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--line-color);
+  opacity: 0.9;
+}
+
+.level-children {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.level-line {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.level-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #234164;
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.42;
+}
+
+.node-number {
+  flex: 0 0 auto;
+  min-width: 30px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cddcf4;
+  background: #eef3ff;
+  color: #2f5687;
+  font-size: 0.72rem;
   font-weight: 800;
 }
 
-.promise-block {
+.level-2 {
+  margin-left: 14px;
+  --line-color: #83a7de;
+  background: #fbfdff;
+}
+
+.level-3 {
+  margin-left: 28px;
+  --line-color: #9eb8e6;
+  background: #f9fbff;
+}
+
+.level-4 {
+  margin-left: 42px;
+  --line-color: #b3c7eb;
+  background: #f7f9ff;
+}
+
+.level-5 {
+  margin-left: 56px;
+  --line-color: #c4d4ef;
+  background: #f5f8ff;
+}
+
+.level-6 {
+  margin-left: 70px;
+  --line-color: #d1ddf2;
+  background: #f3f6ff;
+}
+
+/* Politician detail: cleaner pledge table layout */
+.politician-page .pledge-section {
+  border-color: #d7dee9;
+  box-shadow: none;
+}
+
+.politician-page .pledge-section-body {
+  background: #ffffff;
+  padding: 12px 14px 14px;
+}
+
+.politician-page .promise-card.no-avatar {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.politician-page .promise-name {
+  font-size: 1.06rem;
+}
+
+.politician-page .promise-meta {
+  margin-bottom: 10px;
+}
+
+.politician-page .promise-meta .status,
+.politician-page .pledge-summary-info.is-status {
+  display: none;
+}
+
+.politician-page .pledge-tree {
   margin-top: 8px;
-  padding: 8px 10px;
+  border: 1px solid #d8e0eb;
   border-radius: 10px;
-  background: #f7faff;
-  border: 1px solid #e4ebfa;
+  background: #ffffff;
+  padding: 12px 14px;
+  gap: 12px;
 }
 
-.promise-line {
-  margin: 0;
-  color: #2e4668;
+.politician-page .top-goal-accordion {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.politician-page .top-goal-summary {
+  margin: 0 0 4px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.politician-page .top-goal-summary .level-text {
+  display: block;
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.politician-page .top-goal-summary .level-text::before {
+  content: "○ ";
+  color: #374151;
+}
+
+.politician-page .top-goal-body {
+  padding: 0;
+}
+
+.politician-page .level-node {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 0;
+  margin-left: 0;
+}
+
+.politician-page .level-node::before {
+  display: none;
+}
+
+.politician-page .level-children {
+  margin-top: 0;
+  gap: 2px;
+}
+
+.politician-page .level-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.politician-page .node-number {
+  display: none;
+}
+
+.politician-page .level-text {
+  color: #1f2937;
+  font-size: 1.02rem;
+  font-weight: 500;
+  line-height: 1.66;
+}
+
+.politician-page .level-2,
+.politician-page .level-3,
+.politician-page .level-4,
+.politician-page .level-5,
+.politician-page .level-6 {
+  background: transparent;
+  --line-color: transparent;
+}
+
+.politician-page .level-2 {
+  padding-left: 10px;
+}
+
+.politician-page .level-3 {
+  padding-left: 26px;
+}
+
+.politician-page .level-4 {
+  padding-left: 42px;
+}
+
+.politician-page .level-5 {
+  padding-left: 58px;
+}
+
+.politician-page .level-6 {
+  padding-left: 74px;
+}
+
+.politician-page .level-2 > .level-line > .level-text::before {
+  content: "· ";
+  color: #4b5563;
+}
+
+.politician-page .level-3 > .level-line > .level-text::before,
+.politician-page .level-4 > .level-line > .level-text::before,
+.politician-page .level-5 > .level-line > .level-text::before,
+.politician-page .level-6 > .level-line > .level-text::before {
+  content: "- ";
+  color: #6b7280;
+}
+
+.politician-page .score-input-trigger,
+.politician-page .score-readonly {
+  border-color: #d3deec;
+  background: #ffffff;
+  padding: 4px 8px;
+  width: min(100%, 364px);
+  justify-content: space-between;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.politician-page .score-input-label {
+  min-width: 56px;
+  min-height: 20px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  padding: 0;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.politician-page .score-input-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  min-height: 20px;
+  border-radius: 999px;
+  border: 1px solid #d0dae9;
+  background: #f4f8ff;
+  color: #1f4f90;
+  padding: 0 8px;
+  font-size: 0.7rem;
   font-weight: 700;
-  font-size: 0.9rem;
-  line-height: 1.45;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  white-space: nowrap;
 }
 
-.item-list {
-  margin: 6px 0 0;
-  padding-left: 20px;
-  list-style: circle;
-  color: #44556f;
-  font-size: 0.86rem;
+.politician-page .pledge-sources-block {
+  margin-top: 12px;
+  border: 1px solid #dde4ed;
+  border-radius: 8px;
+  background: #fafcff;
+  padding: 8px 10px;
 }
 
-.item-list li {
-  margin-bottom: 4px;
-  line-height: 1.42;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.politician-page .pledge-sources-block summary {
+  list-style: none;
+  cursor: pointer;
+  color: #1f3f66;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.politician-page .pledge-sources-block summary::-webkit-details-marker {
+  display: none;
+}
+
+.politician-page .pledge-sources-block summary::before {
+  content: "▸ ";
+}
+
+.politician-page .pledge-sources-block[open] summary::before {
+  content: "▾ ";
+}
+
+.politician-page .pledge-sources-empty {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.politician-page .pledge-sources-list {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.politician-page .pledge-sources-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.politician-page .pledge-sources-list a {
+  color: #1f4f90;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.politician-page .pledge-sources-list span {
+  color: #334155;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.politician-page .pledge-sources-list small {
+  color: #64748b;
+  font-size: 0.74rem;
 }
 
 .score-bar {
+  position: relative;
+  display: block;
   flex: 0 0 auto;
-  width: 172px;
-  height: 14px;
+  width: 180px;
+  height: 12px;
   border-radius: 999px;
-  background: #eaf1fb;
-  border: 1px solid #b9c9e2;
+  background: #eef3fa;
+  border: 1px solid #b9c7dd;
   overflow: hidden;
+}
+
+.score-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, transparent calc(20% - 1px), rgba(15, 23, 42, 0.2) calc(20% - 1px), rgba(15, 23, 42, 0.2) 20%, transparent 20%),
+    linear-gradient(to right, transparent calc(40% - 1px), rgba(15, 23, 42, 0.2) calc(40% - 1px), rgba(15, 23, 42, 0.2) 40%, transparent 40%),
+    linear-gradient(to right, transparent calc(60% - 1px), rgba(15, 23, 42, 0.2) calc(60% - 1px), rgba(15, 23, 42, 0.2) 60%, transparent 60%),
+    linear-gradient(to right, transparent calc(80% - 1px), rgba(15, 23, 42, 0.2) calc(80% - 1px), rgba(15, 23, 42, 0.2) 80%, transparent 80%);
 }
 
 .score-readonly,
@@ -660,11 +1072,12 @@
 
 .score-input-trigger {
   cursor: pointer;
+  text-align: left;
 }
 
 .score-input-trigger:hover {
-  border-color: #9db7e2;
-  background: #ffffff;
+  border-color: #8eaad5;
+  background: #fbfdff;
 }
 
 .score-input-trigger:focus-visible {
@@ -691,29 +1104,25 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: #3b82f6;
+  background: #22c55e;
   transition: width 0.25s ease;
 }
 
 .score-bar-fill.pending {
-  background: linear-gradient(90deg, #30a46c, #2b7fff);
-  opacity: 0.8;
+  background: #cbd5e1;
+  opacity: 0.9;
 }
 
 .score-bar-fill.tier-low {
   background: #ef4444;
 }
 
-.score-bar-fill.tier-mid-low {
+.score-bar-fill.tier-mid {
   background: #f59e0b;
 }
 
-.score-bar-fill.tier-mid-high {
-  background: #3b82f6;
-}
-
 .score-bar-fill.tier-high {
-  background: #16a34a;
+  background: #22c55e;
 }
 
 .progress-modal {
@@ -818,6 +1227,12 @@
   font-family: inherit;
 }
 
+.progress-form .source-date-control {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+}
+
 .progress-form textarea {
   resize: vertical;
 }
@@ -838,6 +1253,98 @@
   color: #486187;
   font-size: 0.8rem;
   font-weight: 800;
+}
+
+.progress-score-criteria {
+  margin: 2px 0 4px;
+  border: 1px solid #dbe5f6;
+  border-radius: 10px;
+  background: #f9fbff;
+  padding: 10px;
+}
+
+.progress-score-criteria-title {
+  margin: 0 0 6px;
+  color: #1e3a63;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.progress-score-criteria-hint {
+  margin: 0;
+  color: #253f66;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.progress-score-criteria-details {
+  margin-top: 8px;
+  border-top: 1px dashed #cfdbef;
+  padding-top: 8px;
+}
+
+.progress-score-criteria-details summary {
+  list-style: none;
+  cursor: pointer;
+  color: #2c4d79;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.progress-score-criteria-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.progress-score-criteria-details summary::before {
+  content: "▸ ";
+}
+
+.progress-score-criteria-details[open] summary::before {
+  content: "▾ ";
+}
+
+.progress-score-criteria-table-wrap {
+  margin-top: 8px;
+  border: 1px solid #d6e2f5;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.progress-score-criteria-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  color: #24334d;
+}
+
+.progress-score-criteria-table th,
+.progress-score-criteria-table td {
+  border-bottom: 1px solid #e6edf9;
+  padding: 8px 9px;
+  vertical-align: top;
+  text-align: left;
+  line-height: 1.42;
+}
+
+.progress-score-criteria-table thead th {
+  background: #eef3ff;
+  color: #29486f;
+  font-weight: 800;
+}
+
+.progress-score-criteria-table tbody th {
+  width: 56px;
+  text-align: center;
+  color: #1f365a;
+  font-weight: 800;
+  background: #f7faff;
+}
+
+.progress-score-criteria-table tbody tr:last-child th,
+.progress-score-criteria-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .progress-form-actions {
@@ -861,6 +1368,123 @@
   border-color: #c7d5ee;
   background: #f6faff;
   color: #375077;
+}
+
+.progress-form-actions .danger-btn {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
+.progress-form-actions .danger-btn:hover {
+  background: #ffe4e6;
+}
+
+.progress-detail-panel {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.progress-detail-score {
+  margin-top: 6px;
+}
+
+.progress-detail-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d2dceb;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f8fbff;
+}
+
+.progress-detail-score-chip strong {
+  font-size: 0.86rem;
+  color: #1e3a5f;
+}
+
+.progress-detail-summary {
+  margin: 10px 0 0;
+  color: #334155;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.progress-detail-section {
+  margin-top: 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 10px;
+  background: #fcfdff;
+  padding: 10px;
+}
+
+.progress-detail-section h4 {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+  color: #1f3f66;
+}
+
+.progress-detail-reason {
+  margin: 0;
+  white-space: normal;
+  line-height: 1.55;
+  color: #1f2937;
+  font-size: 0.83rem;
+}
+
+.progress-detail-source-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-detail-source-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.progress-detail-source-list li {
+  display: grid;
+  gap: 3px;
+}
+
+.progress-detail-source-list a {
+  color: #1e4f90;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.progress-detail-source-list span {
+  color: #1f2937;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.progress-detail-source-list small {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.progress-detail-quote {
+  margin: 0;
+  color: #475569;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.progress-detail-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.progress-detail-actions {
+  margin-top: 12px;
 }
 
 .empty {
@@ -930,6 +1554,22 @@
     flex-direction: column;
   }
 
+  .pledge-summary-title {
+    white-space: normal;
+  }
+
+  .pledge-summary-tags {
+    justify-content: flex-start;
+  }
+
+  .top-goal-summary {
+    align-items: flex-start;
+  }
+
+  .node-number {
+    min-width: 28px;
+  }
+
   .score-bar {
     width: 144px;
     height: 12px;
@@ -939,11 +1579,32 @@
   .score-input-trigger {
     gap: 6px;
     padding: 3px 6px;
+    width: min(100%, 320px);
   }
 
   .score-input-label {
     font-size: 0.72rem;
     padding: 0 7px;
+  }
+
+  .level-2 {
+    margin-left: 10px;
+  }
+
+  .level-3 {
+    margin-left: 20px;
+  }
+
+  .level-4 {
+    margin-left: 30px;
+  }
+
+  .level-5 {
+    margin-left: 40px;
+  }
+
+  .level-6 {
+    margin-left: 50px;
   }
 
   .progress-modal-panel {
@@ -954,6 +1615,10 @@
   }
 
   .progress-form .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-form .source-date-control {
     grid-template-columns: 1fr;
   }
 

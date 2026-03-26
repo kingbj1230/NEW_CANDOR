@@ -114,6 +114,25 @@ body {
   color: #0f172a;
 }
 
+.app-nav-btn-hall {
+  background: linear-gradient(180deg, #fff8e7 0%, #fff1ca 100%);
+  color: #7b5600;
+  border-color: #f2d48b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.app-nav-btn-hall:hover {
+  background: linear-gradient(180deg, #fffdf5 0%, #ffe9b0 100%);
+  color: #5e4300;
+  border-color: #e3bf69;
+}
+
+.app-nav-btn-hall.active {
+  background: linear-gradient(180deg, #ffe8a8 0%, #ffd36f 100%);
+  color: #4f3500;
+  border-color: #dcaf4f;
+}
+
 .app-nav-btn-ghost {
   background: #fff;
   color: #334155;

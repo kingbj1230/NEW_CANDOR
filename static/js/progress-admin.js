@@ -11,6 +11,7 @@ const countLabelEl = document.getElementById("overviewCountLabel");
 
 let loadingCount = 0;
 let overviewRows = [];
+const OVERVIEW_FETCH_LIMIT = 200;
 
 function setMessage(text, type = "info") {
   if (!messageEl) return;
@@ -59,6 +60,14 @@ function toDateLabel(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("ko-KR");
+}
+
+function formatPresidentialElectionTitle(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return text || "선거 정보 없음";
+  const round = Number(text);
+  if (!Number.isFinite(round) || round < 1) return text || "선거 정보 없음";
+  return `제${round}대 대통령 선거`;
 }
 
 function formatRate(value) {
@@ -118,7 +127,7 @@ function renderList(filteredRows) {
           ${imageMarkup}
           <div class="overview-main">
             <h4>${escapeHtml(row?.candidate_name || "이름 없음")}</h4>
-            <p>${escapeHtml(row?.election_type || "기타")} · ${escapeHtml(row?.election_title || "선거 정보 없음")} · ${escapeHtml(toDateLabel(row?.election_date))}</p>
+            <p>${escapeHtml(row?.election_type || "기타")} · ${escapeHtml(formatPresidentialElectionTitle(row?.election_title))} · ${escapeHtml(toDateLabel(row?.election_date))}</p>
             <p>${escapeHtml(row?.party || "-")} · ${escapeHtml(row?.result || "-")} · 평가 ${escapeHtml(String(row?.evaluated_count || 0))}/${escapeHtml(String(row?.target_count || 0))}</p>
           </div>
           <div class="overview-side">
@@ -148,7 +157,7 @@ function applyFilters() {
         row?.candidate_name,
         row?.party,
         row?.election_type,
-        row?.election_title,
+        formatPresidentialElectionTitle(row?.election_title),
         row?.result,
       ]
         .map((v) => String(v || ""))
@@ -164,11 +173,15 @@ function applyFilters() {
 async function loadOverview() {
   setLoading(true, "이행현황을 불러오는 중입니다...");
   try {
-    const payload = await apiGet("/api/progress-overview");
+    const payload = await apiGet(`/api/progress-overview?limit=${OVERVIEW_FETCH_LIMIT}&offset=0`);
     overviewRows = payload.rows || [];
     renderElectionTypeOptions();
     applyFilters();
-    setMessage("이행현황을 불러왔습니다.", "success");
+    if (payload.warning) {
+      setMessage("이행현황 일부를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.", "error");
+    } else {
+      setMessage("이행현황을 불러왔습니다.", "success");
+    }
   } catch (error) {
     setMessage(error.message || "이행현황 조회 실패", "error");
   } finally {

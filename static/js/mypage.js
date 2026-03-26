@@ -4,6 +4,7 @@ const MYPAGE_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 let mypageClient = null;
 let currentUser = null;
 let currentProfile = null;
+let currentIsAdmin = false;
 let cachedCandidates = [];
 let cachedPledges = [];
 let cachedReports = [];
@@ -11,6 +12,8 @@ let candidateNameMap = new Map();
 let candidateElectionMap = new Map();
 let electionMap = new Map();
 const REPORT_STATUS_OPTIONS = ["접수", "검토중", "처리완료", "반려"];
+const PROFILE_NICKNAME_MIN_LENGTH = 2;
+const PROFILE_NICKNAME_MAX_LENGTH = 30;
 
 function getMypageClient() {
   if (!window.supabase) throw new Error("Supabase SDK가 로드되지 않았습니다.");
@@ -76,6 +79,14 @@ function formatDate(value, withTime = false) {
     day: "2-digit",
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
+}
+
+function formatPresidentialElectionTitle(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return text || "선거 정보 없음";
+  const round = Number(text);
+  if (!Number.isFinite(round) || round < 1) return text || "선거 정보 없음";
+  return `제${round}대 대통령 선거`;
 }
 
 function isAdminRole(role) {
@@ -144,38 +155,10 @@ async function resolveCurrentUser() {
   currentUser = { id: userId, email };
 }
 
-async function fetchUserProfile(userId) {
-  const client = getMypageClient();
-  const attempts = [
-    { idColumn: "user__id", createdColumn: "create_at", updatedColumn: "update_at" },
-    { idColumn: "user_id", createdColumn: "create_at", updatedColumn: "update_at" },
-    { idColumn: "user__id", createdColumn: "created_at", updatedColumn: "updated_at" },
-    { idColumn: "user_id", createdColumn: "created_at", updatedColumn: "updated_at" },
-  ];
-
-  for (const attempt of attempts) {
-    const { data, error } = await client
-      .from("user_profiles")
-      .select(`${attempt.idColumn}, nickname, role, status, ${attempt.createdColumn}, ${attempt.updatedColumn}, reputation_score`)
-      .eq(attempt.idColumn, userId)
-      .maybeSingle();
-
-    if (!error) {
-      return data
-        ? {
-            ...data,
-            created_at: data[attempt.createdColumn],
-            updated_at: data[attempt.updatedColumn],
-          }
-        : null;
-    }
-
-    if (!String(error.message || "").includes("column")) {
-      throw new Error(error.message || "프로필 조회 실패");
-    }
-  }
-
-  throw new Error("user_profiles 컬럼명을 확인해 주세요.");
+async function fetchMyProfile() {
+  const payload = await apiGet("/api/mypage/profile");
+  currentIsAdmin = !!payload?.is_admin || isAdminRole(payload?.profile?.role);
+  return payload?.profile || null;
 }
 
 async function fetchMyCandidates(userId) {
@@ -237,12 +220,14 @@ async function fetchAdminReports() {
 function renderSummary() {
   text("summaryCandidateCount", String(cachedCandidates.length));
   text("summaryPledgeCount", String(cachedPledges.length));
-  text("summaryRole", roleLabel(currentProfile?.role));
+  if (currentIsAdmin) text("summaryRole", roleLabel(currentProfile?.role));
 
+  const roleCard = byId("summaryRoleCard");
+  if (roleCard) roleCard.hidden = !currentIsAdmin;
   const reportCard = byId("summaryReportCard");
   if (!reportCard) return;
 
-  if (isAdminRole(currentProfile?.role)) {
+  if (currentIsAdmin) {
     reportCard.hidden = false;
     text("summaryReportCount", String(cachedReports.length));
   } else {
@@ -253,10 +238,14 @@ function renderSummary() {
 function renderProfile() {
   text("profileNickname", currentProfile?.nickname || "-");
   text("profileEmail", currentUser?.email || "-");
-  setRoleBadge(currentProfile?.role || "-");
-  text("profileStatus", currentProfile?.status || "-");
+  if (currentIsAdmin) {
+    setRoleBadge(currentProfile?.role || "-");
+    text("profileStatus", currentProfile?.status || "-");
+  }
   text("profileCreatedAt", formatDate(currentProfile?.created_at));
   text("profileReputation", String(currentProfile?.reputation_score ?? "-"));
+  const nicknameInput = byId("profileNicknameInput");
+  if (nicknameInput) nicknameInput.value = currentProfile?.nickname || "";
 }
 
 function renderCandidates() {
@@ -297,7 +286,7 @@ function getPledgeContext(item) {
   const candidateId = normalizeCandidateId(candidateElection.candidate_id) || null;
   const candidateName = candidateId ? candidateNameMap.get(String(candidateId)) || "후보자 정보 없음" : "후보자 정보 없음";
   const election = electionMap.get(String(candidateElection.election_id)) || {};
-  const electionParts = [election.election_type, election.title, formatDate(election.election_date)]
+  const electionParts = [election.election_type, formatPresidentialElectionTitle(election.title), formatDate(election.election_date)]
     .map((v) => String(v || "").trim())
     .filter(Boolean);
   return {
@@ -353,7 +342,7 @@ function renderAdminReports() {
 
   if (!tabButton || !panel || !list || !count) return;
 
-  if (!isAdminRole(currentProfile?.role)) {
+  if (!currentIsAdmin) {
     tabButton.hidden = true;
     panel.hidden = true;
     if (panel.classList.contains("is-active")) activateTab("profile");
@@ -403,6 +392,12 @@ function renderAdminReports() {
       </li>`;
     })
     .join("");
+}
+
+async function saveMyNickname(nickname) {
+  const payload = await apiPatch("/api/mypage/profile", { nickname });
+  currentIsAdmin = !!payload?.is_admin || currentIsAdmin;
+  return payload?.profile || null;
 }
 
 function openModal(modalEl) {
@@ -516,6 +511,39 @@ function bindListActions() {
 }
 
 function bindEditForms() {
+  byId("profileNicknameForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = byId("profileNicknameInput");
+    const saveBtn = byId("profileNicknameSaveBtn");
+    const nickname = String(input?.value || "").trim();
+
+    if (!nickname) {
+      setMypageMessage("닉네임을 입력해 주세요.", "error");
+      return;
+    }
+    if (nickname.length < PROFILE_NICKNAME_MIN_LENGTH || nickname.length > PROFILE_NICKNAME_MAX_LENGTH) {
+      setMypageMessage(`닉네임은 ${PROFILE_NICKNAME_MIN_LENGTH}~${PROFILE_NICKNAME_MAX_LENGTH}자로 입력해 주세요.`, "error");
+      return;
+    }
+    if (nickname === String(currentProfile?.nickname || "").trim()) {
+      setMypageMessage("변경된 내용이 없습니다.", "info");
+      return;
+    }
+
+    try {
+      if (saveBtn) saveBtn.disabled = true;
+      const updatedProfile = await saveMyNickname(nickname);
+      currentProfile = updatedProfile || { ...(currentProfile || {}), nickname };
+      renderProfile();
+      renderSummary();
+      setMypageMessage("닉네임을 변경했습니다.", "success");
+    } catch (error) {
+      setMypageMessage(error.message || "닉네임 저장 실패", "error");
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
   byId("candidateEditForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = byId("candidateEditId").value;
@@ -585,7 +613,7 @@ function bindEditForms() {
 
 async function loadMypageData() {
   await resolveCurrentUser();
-  currentProfile = await fetchUserProfile(currentUser.id);
+  currentProfile = await fetchMyProfile();
 
   const [candidates, pledges] = await Promise.all([
     fetchMyCandidates(currentUser.id),
@@ -616,7 +644,7 @@ async function loadMypageData() {
   );
   electionMap = await fetchElectionMap(electionIds);
 
-  if (isAdminRole(currentProfile?.role)) {
+  if (currentIsAdmin) {
     cachedReports = await fetchAdminReports();
   } else {
     cachedReports = [];

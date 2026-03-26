@@ -3,15 +3,17 @@
 {% block title %}이행현황{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/progress.css', v='20260313r2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/progress.css', v='20260326r2') }}">
 {% endblock %}
 
 {% block main %}
 <section class="progress-overview-shell">
     <div class="progress-overview-hero">
         <h1>이행현황</h1>
+        <p class="progress-overview-subnote">관리자 검수와 데이터 축적이 완료된 뒤 단계적으로 공개됩니다.</p>
     </div>
 
+    {% if is_admin_user %}
     <div id="progressOverviewMessage" class="progress-overview-message" aria-live="polite"></div>
 
     <section class="overview-controls-card">
@@ -48,7 +50,19 @@
             <p id="progressOverviewLoadingText">이행현황을 불러오는 중입니다...</p>
         </div>
     </div>
+    {% else %}
+    <section class="progress-public-locked-card" aria-live="polite">
+        <h2>이행현황 준비 중</h2>
+        <p>정보가 더 모인 이후 공개됩니다!</p>
+        <div class="progress-public-cta">
+            <p>후보자 이행률을 등록하시고 싶으신가요?</p>
+            <a href="/politicians" class="progress-public-cta-link">정치인으로 이동</a>
+        </div>
+    </section>
+    {% endif %}
 </section>
 
-<script src="{{ url_for('static', filename='js/progress-admin.js', v='20260315r1') }}"></script>
+{% if is_admin_user %}
+<script src="{{ url_for('static', filename='js/progress-admin.js', v='20260325r2') }}"></script>
+{% endif %}
 {% endblock %}

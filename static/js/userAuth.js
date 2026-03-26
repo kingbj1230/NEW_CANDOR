@@ -4,6 +4,11 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let supabaseClient = null;
 const AUTO_LOGOUT_IDLE_MS = 3 * 60 * 60 * 1000;
 const ACTIVITY_SYNC_MIN_INTERVAL_MS = 2 * 60 * 1000;
+const OAUTH_LOGIN_PATH = "/login";
+const OAUTH_POST_LOGIN_REDIRECT_PATH = "/";
+const AUTH_PASSWORD_MIN_LENGTH = 6;
+const FORGOT_PASSWORD_SENDING_LABEL = "메일을 보내는 중입니다.";
+const FORGOT_PASSWORD_COOLDOWN_MS = 60 * 1000;
 const REMEMBER_LOGIN_ENABLED_KEY = "candor:remember_login_enabled";
 const REMEMBER_LOGIN_EMAIL_KEY = "candor:remember_login_email";
 const REMEMBER_LOGIN_PASSWORD_KEY = "candor:remember_login_password";
@@ -12,6 +17,8 @@ let autoLogoutRunning = false;
 let activitySyncInFlight = false;
 let lastActivitySyncAt = 0;
 let fetchActivityTrackingBound = false;
+let forgotPasswordInFlight = false;
+let forgotPasswordLastSentAt = 0;
 
 //supabase 클라이언트를 가져오는 함수
 function getSupabaseClient() {
@@ -143,6 +150,16 @@ function bindPasswordVisibilityToggles() {
   });
 }
 
+function getHashParams() {
+  const rawHash = String(window.location.hash || "");
+  const payload = rawHash.startsWith("#") ? rawHash.slice(1) : rawHash;
+  return new URLSearchParams(payload);
+}
+
+function isPasswordRecoveryFlow() {
+  return getHashParams().get("type") === "recovery";
+}
+
 //supabase 로그인상태를 Flask 세션과 동기화하는 함수
 async function syncFlaskLogin(accessToken, user = null) {
   if (!accessToken) {
@@ -256,6 +273,101 @@ async function handleSignIn(emailArg, passwordArg) {
   return { data, error: null };
 }
 
+// Google OAuth 로그인/회원가입 시작 함수
+async function handleGoogleOAuth() {
+  const client = getSupabaseClient();
+  if (!client) return { data: null, error: new Error("Supabase client not initialized") };
+
+  const redirectTo = `${window.location.origin}${OAUTH_LOGIN_PATH}`;
+  const { data, error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (error) {
+    alert("Google 로그인 실패: " + error.message);
+    return { data, error };
+  }
+
+  return { data, error: null };
+}
+
+async function handleForgotPassword(emailArg) {
+  const client = getSupabaseClient();
+  if (!client) return { data: null, error: new Error("Supabase client not initialized") };
+
+  const email = (emailArg || valueById("loginEmail") || valueById("signupEmail")).trim();
+  if (!email) {
+    const error = new Error("비밀번호 재설정 메일을 받을 이메일을 입력해 주세요.");
+    alert(error.message);
+    return { data: null, error };
+  }
+
+  const redirectTo = `${window.location.origin}${OAUTH_LOGIN_PATH}`;
+  const { data, error } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) {
+    alert("비밀번호 재설정 메일 전송 실패: " + error.message);
+    return { data, error };
+  }
+
+  alert("비밀번호 재설정 메일을 보냈습니다. 메일함에서 링크를 확인해 주세요.");
+  return { data, error: null };
+}
+
+async function maybeHandlePasswordRecoveryFlow() {
+  if (!isPasswordRecoveryFlow()) return false;
+
+  const newPassword = window.prompt("새 비밀번호를 입력해 주세요. (6자 이상)");
+  if (newPassword === null) {
+    alert("비밀번호 변경이 취소되었습니다.");
+    return true;
+  }
+
+  const trimmedPassword = String(newPassword || "").trim();
+  if (trimmedPassword.length < AUTH_PASSWORD_MIN_LENGTH) {
+    alert(`비밀번호는 ${AUTH_PASSWORD_MIN_LENGTH}자 이상이어야 합니다.`);
+    return true;
+  }
+
+  const confirmPassword = window.prompt("새 비밀번호를 한 번 더 입력해 주세요.");
+  if (confirmPassword === null) {
+    alert("비밀번호 변경이 취소되었습니다.");
+    return true;
+  }
+  if (trimmedPassword !== String(confirmPassword || "").trim()) {
+    alert("비밀번호 확인 값이 일치하지 않습니다.");
+    return true;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return true;
+
+  const { error } = await client.auth.updateUser({ password: trimmedPassword });
+  if (error) {
+    alert("비밀번호 변경 실패: " + error.message);
+    return true;
+  }
+
+  try {
+    await syncFlaskLogout({ keepalive: true });
+  } catch (err) {
+    console.warn("비밀번호 변경 후 Flask 세션 종료 실패:", err?.message || err);
+  }
+  try {
+    await client.auth.signOut();
+  } catch (err) {
+    console.warn("비밀번호 변경 후 Supabase 세션 종료 실패:", err?.message || err);
+  }
+
+  window.history.replaceState({}, document.title, OAUTH_LOGIN_PATH);
+  const loginPasswordInput = document.getElementById("loginPassword");
+  if (loginPasswordInput) loginPasswordInput.value = "";
+  alert("비밀번호가 변경되었습니다. 새 비밀번호로 다시 로그인해 주세요.");
+  return true;
+}
+
 // 로그아웃 함수
 async function handleSignOut() {
   const client = getSupabaseClient();
@@ -331,21 +443,82 @@ function bindAuthForms() {
   }
 }
 
+function bindGoogleOAuthButtons() {
+  const buttons = document.querySelectorAll("[data-google-auth]");
+  if (!buttons.length) return;
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const { error } = await handleGoogleOAuth();
+        if (error) {
+          button.disabled = false;
+        }
+      } catch (err) {
+        button.disabled = false;
+        alert(err?.message || "Google 로그인 처리 중 오류가 발생했습니다.");
+      }
+    });
+  });
+}
+
+function bindForgotPasswordLink() {
+  const link = document.querySelector("[data-forgot-password]");
+  if (!link) return;
+  const defaultLabel = (link.textContent || "").trim() || "비밀번호를 잊으셨나요?";
+
+  const setSendingState = (isSending) => {
+    forgotPasswordInFlight = isSending;
+    link.textContent = isSending ? FORGOT_PASSWORD_SENDING_LABEL : defaultLabel;
+    link.classList.toggle("is-disabled", isSending);
+    link.setAttribute("aria-disabled", isSending ? "true" : "false");
+  };
+
+  link.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (forgotPasswordInFlight) return;
+
+    const now = Date.now();
+    if (now - forgotPasswordLastSentAt < FORGOT_PASSWORD_COOLDOWN_MS) {
+      const remainSec = Math.max(1, Math.ceil((FORGOT_PASSWORD_COOLDOWN_MS - (now - forgotPasswordLastSentAt)) / 1000));
+      alert(`재설정 메일은 잠시 후 다시 요청해 주세요. (${remainSec}초 남음)`);
+      return;
+    }
+
+    setSendingState(true);
+    try {
+      const { error } = await handleForgotPassword();
+      if (!error) {
+        forgotPasswordLastSentAt = Date.now();
+      }
+    } catch (err) {
+      alert(err?.message || "비밀번호 재설정 요청 중 오류가 발생했습니다.");
+    } finally {
+      setSendingState(false);
+    }
+  });
+}
+
 //브라우저에 저장된 supabase 세션을 Flask 세션과 동기화하는 함수
 async function syncInitialAuthState() {
   const client = getSupabaseClient();
-  if (!client) return;
+  if (!client) return false;
 
   const { data, error } = await client.auth.getSession();
   if (error) {
     console.error("초기 인증 상태 조회 실패:", error.message);
-    return;
+    return false;
   }
 
   if (data?.session?.access_token) {
     await syncFlaskLogin(data.session.access_token, data?.session?.user || null);
+    return true;
   } else {
     await syncFlaskLogout();
+    return false;
   }
 }
 
@@ -497,19 +670,26 @@ function bindLockedNavNotice() {
 }
 
 //DOM이 완전히 로드된 후에 실행됨
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   getSupabaseClient();
   bindApiActivityTracking();
   bindPasswordVisibilityToggles();
   loadRememberedLoginInfo();
   bindRememberLoginOption();
-  (async () => {
-    try {
-      await syncInitialAuthState();
-    } catch (err) {
-      console.error(err?.message || "초기 세션 동기화 중 오류가 발생했습니다.");
+  bindGoogleOAuthButtons();
+  bindForgotPasswordLink();
+  try {
+    const inRecoveryFlow = isPasswordRecoveryFlow();
+    const hasSession = await syncInitialAuthState();
+    if (inRecoveryFlow) {
+      await maybeHandlePasswordRecoveryFlow();
+    } else if (hasSession && window.location.pathname === OAUTH_LOGIN_PATH) {
+      window.location.replace(OAUTH_POST_LOGIN_REDIRECT_PATH);
+      return;
     }
-  })();
+  } catch (err) {
+    console.error(err?.message || "초기 세션 동기화 중 오류가 발생했습니다.");
+  }
   bindAuthForms();
   bindLogoutLink();
   bindLockedNavNotice();
@@ -521,5 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
 window.supabaseAuth = {
   handleSignUp,
   handleSignIn,
+  handleGoogleOAuth,
+  handleForgotPassword,
   handleSignOut,
 };

@@ -1,12 +1,95 @@
 ﻿let cachedPoliticians = [];
 let cachedPromiseCards = [];
 let candidateMap = new Map();
+const PROMISE_CACHE_KEY = "promise_cards_cache_v20260325";
+const PROMISE_CACHE_TTL_MS = 90 * 1000;
+
+function debounce(fn, wait = 120) {
+  let timer = null;
+  return (...args) => {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), wait);
+  };
+}
+
+function readPromiseCardsCache() {
+  try {
+    const raw = sessionStorage.getItem(PROMISE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const savedAt = Number(parsed?.savedAt || 0);
+    const age = Date.now() - savedAt;
+    if (!savedAt || age < 0 || age > PROMISE_CACHE_TTL_MS) return null;
+    const candidates = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
+    const promises = Array.isArray(parsed?.promises) ? parsed.promises : [];
+    return { candidates, promises };
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writePromiseCardsCache(payload) {
+  try {
+    const candidates = Array.isArray(payload?.candidates) ? payload.candidates : [];
+    const promises = Array.isArray(payload?.promises) ? payload.promises : [];
+    const row = JSON.stringify({
+      savedAt: Date.now(),
+      candidates,
+      promises,
+    });
+    sessionStorage.setItem(PROMISE_CACHE_KEY, row);
+  } catch (_err) {
+    // Ignore cache write failures (quota/private mode).
+  }
+}
 
 function toDateLabel(value) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleDateString("ko-KR");
+}
+
+function formatPresidentialElectionTitle(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return text || "선거 정보 없음";
+  const round = Number(text);
+  if (!Number.isFinite(round) || round < 1) return text || "선거 정보 없음";
+  return `제${round}대 대통령 선거`;
+}
+
+function toDateKey(value) {
+  const text = String(value || "").trim();
+  const plain = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (plain) return plain[1];
+  if (!text) return "";
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function todayDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getPublicPositionLabel(row) {
+  const rawPosition = String(row?.position || "").trim();
+  if (!rawPosition.includes("대통령")) return "";
+
+  const today = todayDateKey();
+  const termStart = toDateKey(row?.term_start);
+  const termEnd = toDateKey(row?.term_end);
+
+  if (termEnd && today > termEnd) return "전 대통령";
+  if (termStart && today < termStart) return "대통령";
+  return "대통령";
 }
 
 function splitCategory(category) {
@@ -120,9 +203,11 @@ function renderPoliticians(items) {
         const rawCandidateId = normalizeCandidateId(c.id);
         const candidateId = escapeHtml(rawCandidateId);
         const candidateName = escapeHtml(c.name || "-");
-        const position = escapeHtml(c.position || "-");
+        const publicPosition = getPublicPositionLabel(c);
+        const position = escapeHtml(publicPosition || "-");
         const party = escapeHtml(c.party || "-");
-        const electionTitle = escapeHtml(c.election_title || "-");
+        const bioLine = [publicPosition, c.party].map((v) => String(v || "").trim()).filter(Boolean).join(" · ") || "-";
+        const electionTitle = escapeHtml(formatPresidentialElectionTitle(c.election_title));
         const imageUrl = sanitizeUrl(c.image);
         return `
     <article class="politician-card" data-candidate-id="${candidateId}">
@@ -135,11 +220,11 @@ function renderPoliticians(items) {
       </div>
       <div class="meta">
         <h3>${candidateName}</h3>
-        <p class="bio">${position} · ${party}</p>
+        <p class="bio">${escapeHtml(bioLine)}</p>
         <div class="politician-stats">
           <span><strong>${electionTitle}</strong> 최근 선거</span>
           <span><strong>${party}</strong> 정당</span>
-          <span><strong>${position}</strong> 직책</span>
+          ${publicPosition ? `<span><strong>${position}</strong> 직책</span>` : ""}
         </div>
         <div class="card-actions-row">
           <button type="button" class="report-btn" data-action="report-candidate" data-id="${candidateId}">신고</button>
@@ -164,7 +249,7 @@ function renderPromises(items) {
   listEl.innerHTML = items
     .map((row) => {
       const candidateName = candidateMap.get(String(row.candidate_id))?.name || "후보자 정보 없음";
-      const electionLine = `${row.election_type || "선거"} · ${row.election_title || "선거 정보 없음"} · ${toDateLabel(row.election_date)}`;
+      const electionLine = `${row.election_type || "선거"} · ${formatPresidentialElectionTitle(row.election_title)} · ${toDateLabel(row.election_date)}`;
       const partyLine = `${row.party || "-"} · ${row.result || "-"} · 기호 ${row.candidate_number ?? "-"}`;
       const categoryInfo = splitCategory(row.category);
       const progressValue = progressText(row.progress_rate);
@@ -216,7 +301,7 @@ function filterPoliticians(keyword) {
   const q = String(keyword || "").trim().toLowerCase();
   if (!q) return cachedPoliticians;
   return cachedPoliticians.filter((c) =>
-    [c.name, c.party, c.position].some((v) => String(v || "").toLowerCase().includes(q))
+    [c.name, c.party, getPublicPositionLabel(c)].some((v) => String(v || "").toLowerCase().includes(q))
   );
 }
 
@@ -304,7 +389,7 @@ function populateElectionFilter() {
         .map((row) => {
           const id = String(row.election_id || "");
           if (!id) return null;
-          const label = `${row.election_type || "선거"} · ${row.election_title || "선거 정보 없음"} · ${toDateLabel(row.election_date)}`;
+          const label = `${row.election_type || "선거"} · ${formatPresidentialElectionTitle(row.election_title)} · ${toDateLabel(row.election_date)}`;
           return [id, { id, label, date: row.election_date || "" }];
         })
         .filter(Boolean)
@@ -339,11 +424,21 @@ async function fetchPoliticians() {
   candidateMap = new Map(cachedPoliticians.map((row) => [String(row.id), row]));
 }
 
-async function fetchPromiseCards() {
+async function fetchPromiseCards(forceRefresh = false) {
+  if (!forceRefresh) {
+    const cached = readPromiseCardsCache();
+    if (cached) {
+      cachedPromiseCards = cached.promises;
+      candidateMap = new Map((cached.candidates || []).map((row) => [String(row.id), row]));
+      return;
+    }
+  }
+
   const payload = await apiGet("/api/promises");
   cachedPromiseCards = payload.promises || [];
   const candidates = payload.candidates || [];
   candidateMap = new Map(candidates.map((row) => [String(row.id), row]));
+  writePromiseCardsCache({ candidates, promises: cachedPromiseCards });
 }
 
 function bindPoliticianPage() {
@@ -408,7 +503,7 @@ function bindPromisePage() {
     renderPromises(rows);
   };
 
-  input?.addEventListener("input", renderFiltered);
+  input?.addEventListener("input", debounce(renderFiltered, 120));
   candidate?.addEventListener("change", renderFiltered);
   election?.addEventListener("change", renderFiltered);
   category?.addEventListener("change", renderFiltered);
@@ -419,7 +514,7 @@ function bindPromisePage() {
       event.stopPropagation();
       try {
         await reportTarget({ pledgeId: reportButton.getAttribute("data-id") });
-        await fetchPromiseCards();
+        await fetchPromiseCards(true);
         populateCandidateFilter();
         populateElectionFilter();
         populateCategoryFilter();
@@ -479,3 +574,4 @@ document.addEventListener("DOMContentLoaded", () => {
   if (path === "/politicians") bindPoliticianPage();
   else if (path === "/promises") bindPromisePage();
 });
+

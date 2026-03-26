@@ -83,6 +83,44 @@ function toDateLabel(value) {
   return date.toLocaleDateString("ko-KR");
 }
 
+function formatPresidentialElectionTitle(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return text || "선거 정보 없음";
+  const round = Number(text);
+  if (!Number.isFinite(round) || round < 1) return text || "선거 정보 없음";
+  return `제${round}대 대통령 선거`;
+}
+
+function calculateAgeFromBirthDate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  let year = null;
+  let month = null;
+  let day = null;
+  const plainDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (plainDateMatch) {
+    year = Number(plainDateMatch[1]);
+    month = Number(plainDateMatch[2]);
+    day = Number(plainDateMatch[3]);
+  } else {
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return null;
+    year = parsed.getFullYear();
+    month = parsed.getMonth() + 1;
+    day = parsed.getDate();
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const currentMonth = today.getMonth() + 1;
+  const currentDay = today.getDate();
+  if (currentMonth < month || (currentMonth === month && currentDay < day)) {
+    age -= 1;
+  }
+  return age >= 0 ? age : null;
+}
+
 function toDateInputValue(value) {
   const text = String(value || "").trim();
   const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -210,6 +248,8 @@ function renderCandidates(rows) {
   candidateList.innerHTML = rows
     .map((row) => {
       const createdAt = toDateLabel(row.created_at);
+      const age = calculateAgeFromBirthDate(row.birth_date);
+      const ageText = age === null ? "나이 미상" : `현재 ${age}세`;
       const imageUrl = sanitizeUrl(row.image);
       const imageMarkup = imageUrl
         ? `<img class="candidate-avatar" src="${imageUrl}" alt="${escapeHtml(row.name || "후보자")}">`
@@ -219,10 +259,9 @@ function renderCandidates(rows) {
       <article class="candidate-card">
         <div class="candidate-media">${imageMarkup}</div>
         <div>
-          <span class="tag">ID ${escapeHtml(row.id)}</span>
           <h3 class="card-title">${escapeHtml(row.name || "-")}</h3>
-          <p class="card-sub">등록자: ${escapeHtml(row.created_by || "-")} · 생년월일: ${escapeHtml(toDateLabel(row.birth_date))}</p>
-          <div class="card-meta">${escapeHtml(createdAt)} 생성</div>
+          <p class="card-sub">생년월일: ${escapeHtml(toDateLabel(row.birth_date))} · ${escapeHtml(ageText)}</p>
+          <div class="card-meta">등록일: ${escapeHtml(createdAt)}</div>
         </div>
       </article>
     `;
@@ -271,7 +310,7 @@ function populateElectedPairSelect() {
       const candidate = candidateMap.get(String(pair.candidate_id));
       const election = electionMap.get(String(pair.election_id));
       const candidateName = candidate?.name || `후보자 ID ${pair.candidate_id}`;
-      const electionTitle = election?.title || `선거 ID ${pair.election_id}`;
+      const electionTitle = election ? formatPresidentialElectionTitle(election.title) : `선거 ID ${pair.election_id}`;
       const electionDate = election?.election_date || "일자 미지정";
       return `<option value="${escapeHtml(pair.candidate_id)}::${escapeHtml(pair.election_id)}">${escapeHtml(candidateName)} - ${escapeHtml(electionTitle)} (${escapeHtml(electionDate)})</option>`;
     })
@@ -298,7 +337,7 @@ function renderTerms(rows) {
       const candidate = candidateMap.get(String(row.candidate_id));
       const election = electionMap.get(String(row.election_id));
       const candidateName = candidate?.name || `후보자 ID ${row.candidate_id}`;
-      const electionTitle = election?.title || `선거 ID ${row.election_id}`;
+      const electionTitle = election ? formatPresidentialElectionTitle(election.title) : `선거 ID ${row.election_id}`;
       const termStart = row.term_start || "-";
       const termEnd = row.term_end || "진행 중";
       const createdAt = toDateLabel(row.created_at);
@@ -309,7 +348,7 @@ function renderTerms(rows) {
         <h3 class="card-title">${escapeHtml(candidateName)}</h3>
         <p class="card-sub">선거: ${escapeHtml(electionTitle)}</p>
         <p class="card-sub">임기: ${escapeHtml(termStart)} ~ ${escapeHtml(termEnd)}</p>
-        <div class="card-meta">등록자: ${escapeHtml(row.created_by || "-")} · ${escapeHtml(createdAt)} 생성</div>
+        <div class="card-meta">등록일: ${escapeHtml(createdAt)}</div>
       </article>
     `;
     })

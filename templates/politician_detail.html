@@ -3,7 +3,7 @@
 {% block title %}정치인 상세페이지{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/browse.css', v='20260317r2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/browse.css', v='20260325r10') }}">
 {% endblock %}
 
 {% block main %}
@@ -31,7 +31,7 @@
 
         <div class="politician-pledges-head">
             <h3>선거별 공약</h3>
-            <span id="politicianPledgeCount">0건</span>
+            <span id="politicianPledgeCount">집계 중</span>
         </div>
         <div id="politicianPledgeList" class="promise-list"></div>
     </section>
@@ -66,23 +66,43 @@
                             <option value="0">0.0</option>
                         </select>
                     </div>
-                    <div class="field">
-                        <label for="progressEditorStatus">상태</label>
-                        <select id="progressEditorStatus" required>
-                            <option value="not_started">미착수</option>
-                            <option value="in_progress">진행 중</option>
-                            <option value="partially_completed">부분 완료</option>
-                            <option value="completed">완료</option>
-                            <option value="failed">실패</option>
-                            <option value="unknown">미확인</option>
-                        </select>
-                    </div>
                 </div>
+                <section class="progress-score-criteria" aria-label="이행 점수 평가 기준">
+                    <p class="progress-score-criteria-title">평가 기준 (법률소비자연맹 방식)</p>
+                    <p id="progressScoreCriterionHint" class="progress-score-criteria-hint" aria-live="polite">
+                        0점 기준: 사업이 전혀 착수되지 않았거나 공약 자체가 모호해 평가 불가한 경우.
+                    </p>
+                    <details class="progress-score-criteria-details">
+                        <summary>점수 기준표 보기</summary>
+                        <div class="progress-score-criteria-table-wrap">
+                            <table class="progress-score-criteria-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">점수</th>
+                                        <th scope="col">평가 기준</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><th scope="row">5</th><td>완료 사업 또는 기한 내 완료가 확실한 사업. 목표가 명확하고 충족된 경우.</td></tr>
+                                    <tr><th scope="row">4.5</th><td>아직 완료 전이지만 완료 가능성이 매우 높고, 임기 중 실질적으로 지속 이행 중인 사업.</td></tr>
+                                    <tr><th scope="row">4</th><td>예산과 세부 일정이 확정되어 진행 중이거나, 정책 시행으로 공약이 사실상 이행된 사업.</td></tr>
+                                    <tr><th scope="row">3.5</th><td>축소·변경 형태로 일부 완료된 사업, 또는 이행 실적이 있으나 목표 달성이 제한적인 사업.</td></tr>
+                                    <tr><th scope="row">3</th><td>추진 중이지만 계획 축소·변경이 있거나 법안 통과/결의 등 제도 단계에 머문 사업.</td></tr>
+                                    <tr><th scope="row">2.5</th><td>사전 검토는 이뤄졌으나 구체적 실행 일정이 불명확한 사업.</td></tr>
+                                    <tr><th scope="row">2</th><td>논의·협의 단계이거나 법안 발의 수준으로, 구체적 집행 계획이 아직 없는 사업.</td></tr>
+                                    <tr><th scope="row">1.5</th><td>계획만 있고 실질 추진 내용이 거의 확인되지 않는 사업.</td></tr>
+                                    <tr><th scope="row">1</th><td>공약 주체의 실질 이행으로 보기 어렵거나 상징적 활동 수준에 머문 경우.</td></tr>
+                                    <tr><th scope="row">0</th><td>착수되지 않았거나 중단·무산되었고, 정치·경제적 사유 등으로 이행이 불가능한 경우.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                </section>
 
                 <div class="field-row">
                     <div class="field">
                         <label for="progressEditorEvaluator">평가 주체</label>
-                        <input id="progressEditorEvaluator" type="text" placeholder="예: 시민단체">
+                        <input id="progressEditorEvaluator" type="text" placeholder="로그인한 Gmail 계정" readonly>
                     </div>
                     <div class="field">
                         <label for="progressEditorDate">평가 기준일</label>
@@ -124,7 +144,13 @@
                     </div>
                     <div class="field">
                         <label for="progressEditorSourceDate">출처 발행일</label>
-                        <input id="progressEditorSourceDate" type="date">
+                        <div class="source-date-control">
+                            <select id="progressEditorSourceDateMode">
+                                <option value="unknown">모름</option>
+                                <option value="known">날짜 입력</option>
+                            </select>
+                            <input id="progressEditorSourceDate" type="date" disabled>
+                        </div>
                     </div>
                 </div>
 
@@ -171,10 +197,42 @@
         </div>
     </div>
 
+    <div id="progressDetailModal" class="progress-modal" hidden>
+        <div class="progress-modal-backdrop" data-action="close-progress-detail"></div>
+        <div class="progress-modal-panel progress-detail-panel" role="dialog" aria-modal="true" aria-labelledby="progressDetailTitle">
+            <div class="progress-modal-head">
+                <h3 id="progressDetailTitle">평가 자세히 보기</h3>
+                <button type="button" class="progress-close-btn" data-action="close-progress-detail">닫기</button>
+            </div>
+            <p id="progressDetailNodePath" class="progress-node-path">평가 대상을 선택해 주세요.</p>
+            <div id="progressDetailScore" class="progress-detail-score"></div>
+            <p id="progressDetailSummary" class="progress-detail-summary">아직 평가가 완료되지 않았습니다.</p>
+
+            <section class="progress-detail-section" aria-label="평가 이유">
+                <h4>평가 이유</h4>
+                <p id="progressDetailReason" class="progress-detail-reason">평가 이유가 아직 입력되지 않았습니다.</p>
+            </section>
+
+            <section class="progress-detail-section" aria-label="근거 출처">
+                <h4>근거 출처</h4>
+                <div id="progressDetailSourceList" class="progress-detail-source-wrap">
+                    <p class="progress-detail-empty">연결된 출처가 없습니다.</p>
+                </div>
+            </section>
+
+            <div class="progress-form-actions progress-detail-actions">
+                <button id="progressDetailDeleteBtn" type="button" class="outline-btn danger-btn" data-action="delete-progress-evaluation" hidden>평가 삭제</button>
+                <button id="progressDetailReportBtn" type="button" class="outline-btn" data-action="report-progress-evaluation">타당성 신고</button>
+                <button id="progressDetailOpenEditorBtn" type="button" data-action="open-progress-editor-from-detail">평가 수정</button>
+            </div>
+        </div>
+    </div>
+
 </section>
 
 <script nonce="{{ csp_nonce }}">
     window.POLITICIAN_DETAIL_ID = {{ candidate_id | tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/politicianDetail.js', v='20260317r2') }}"></script>
+<script src="{{ url_for('static', filename='js/politician-detail-tree.js', v='20260325r6') }}"></script>
+<script src="{{ url_for('static', filename='js/politicianDetail.js', v='20260326r1') }}"></script>
 {% endblock %}

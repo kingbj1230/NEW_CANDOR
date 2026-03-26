@@ -1,1378 +1,910 @@
-﻿const TEXT = {
-  processing: "처리 중입니다. 잠시만 기다려 주세요...",
-  requestFail: "요청 실패",
-  defaultGoal: "기본 목표",
-  defaultPromise: "세부 공약",
-  noItems: "실행 항목 없음",
-  noPromises: "세부 공약이 아직 없습니다.",
-  candidateId: "후보자 ID ",
-  electionId: "선거 ID ",
-  noResult: "결과 미지정",
-  selectCandidateElection: "후보자-선거를 선택하세요",
-  needCandidateElection: "후보자-선거 매칭을 선택해 주세요.",
-  needTitleCategory: "공약 제목과 카테고리를 모두 입력해 주세요.",
-  parseFail: "본문을 구조화할 수 없습니다. 첫 문단은 목표, 다음 문단은 세부 공약 형태로 작성해 주세요.",
-  badSort: "공약 정렬 순서는 1 이상의 숫자여야 합니다.",
-  preparing: "공약 등록 화면을 준비하는 중입니다...",
-  ready: "공약 등록 페이지가 준비되었습니다.",
-  initFail: "초기 로딩 실패",
-  guidedTokenProtected: "기호와 공백은 한 세트로 유지됩니다. 지우려면 Backspace/Delete로 한 번에 지워주세요.",
-  guidedNeedTextAfterMarker: "기호만 남아 있으면 저장할 수 없습니다. 뒤에 내용을 입력해 주세요.",
-  guidedTabOnly: "이 버튼은 '자유 작성' 탭에서 사용할 수 있습니다.",
-  goalOtherPrompt: "기타 항목에 들어갈 제목을 입력해 주세요.",
-  goalOtherRequired: "기타 항목은 비워 둘 수 없습니다.",
-  blogNeedGoal: "대항목을 먼저 등록해 주세요.",
-  blogNeedPromise: "상위 대항목을 선택하고 중항목 내용을 입력해 주세요.",
-  blogNeedItem: "상위 중항목을 선택하고 세부항목 내용을 입력해 주세요.",
-  blogNeedGoalType: "대항목 구분을 선택해 주세요.",
-  blogNeedNodeType: "추가할 유형을 선택해 주세요.",
-  blogEmpty: "아직 추가된 구조가 없습니다.",
-  confirmDeleteGoalNode: "대항목을 삭제할까요? 하위 중항목/세부항목도 함께 삭제됩니다.",
-  confirmDeletePromiseNode: "중항목을 삭제할까요? 하위 세부항목도 함께 삭제됩니다.",
-  confirmDeleteItemNode: "세부항목을 삭제할까요?",
-  sourceEmpty: "아직 등록된 출처가 없습니다.",
-  sourceNeedTitle: "출처 제목은 필수입니다.",
-  sourceNeedAtLeastOne: "공약 출처를 최소 1개 이상 등록해 주세요.",
-  sourceNeedReusable: "재사용할 기존 출처를 선택해 주세요.",
-  sourceSaving: "공약과 출처를 함께 저장하는 중입니다...",
-  sourceSaved: "공약과 출처가 저장되었습니다.",
-  sourceSaveFail: "공약 출처 저장 실패",
+﻿const utils = window.PledgeAdminUtils;
+const preview = window.PledgeAdminPreview;
+
+const dom = {
+  pledgeGridEl: document.querySelector(".pledge-grid"),
+  messageEl: document.getElementById("pledgeMessage"),
+  pledgeForm: document.getElementById("pledgeForm"),
+
+  electionSelect: document.getElementById("pledgeElectionId"),
+  candidateSearchInput: document.getElementById("pledgeCandidateSearch"),
+  candidateSearchDropdown: document.getElementById("pledgeCandidateSearchDropdown"),
+  candidateSearchHelp: document.getElementById("pledgeCandidateSearchHelp"),
+  candidateElectionIdInput: document.getElementById("candidateElectionId"),
+
+  pledgeTitleInput: document.getElementById("pledgeTitle"),
+  pledgeCategoryInput: document.getElementById("pledgeCategory"),
+  pledgeSortOrderInput: document.getElementById("pledgeSortOrder"),
+
+  editorTabButtons: Array.from(document.querySelectorAll("[data-editor-tab-target]")),
+  editorPanels: Array.from(document.querySelectorAll("[data-editor-tab-panel]")),
+
+  pledgeRawTextInput: document.getElementById("pledgeRawText"),
+
+  structuredSectionTypeSelect: document.getElementById("structuredSectionType"),
+  structuredItemTextInput: document.getElementById("structuredItemText"),
+  addStructuredItemBtn: document.getElementById("addStructuredItemBtn"),
+  structuredTopicGrid: document.querySelector(".structured-topic-stack"),
+  structuredTopicListEls: {
+    goal: document.querySelector('[data-structured-topic-list="goal"]'),
+    method: document.querySelector('[data-structured-topic-list="method"]'),
+    timeline: document.querySelector('[data-structured-topic-list="timeline"]'),
+    finance: document.querySelector('[data-structured-topic-list="finance"]'),
+  },
+  structuredTopicCountEls: {
+    goal: document.querySelector('[data-structured-topic-count="goal"]'),
+    method: document.querySelector('[data-structured-topic-count="method"]'),
+    timeline: document.querySelector('[data-structured-topic-count="timeline"]'),
+    finance: document.querySelector('[data-structured-topic-count="finance"]'),
+  },
+
+  sourceModeInputs: Array.from(document.querySelectorAll("input[name='sourceLinkMode']")),
+  sourceModeHelp: document.getElementById("sourceModeHelp"),
+  sourceEmptyHint: document.getElementById("sourceEmptyHint"),
+  sourceSummaryBar: document.getElementById("sourceSummaryBar"),
+  sourceCountBadge: document.getElementById("sourceCountBadge"),
+  sourceQuickList: document.getElementById("sourceQuickList"),
+  sourceRowsContainer: document.getElementById("sourceRowsContainer"),
+  sourceRowTemplate: document.getElementById("sourceRowTemplate"),
+  addSourceRowBtn: document.getElementById("addSourceRowBtn"),
+
+  parsePledgeBtn: document.getElementById("parsePledgeBtn"),
+  savePledgeBtn: document.getElementById("savePledgeBtn"),
+
+  detectedTypeEl: document.getElementById("detectedType"),
+  warningTextEl: document.getElementById("warningText"),
+  goalsBoxEl: document.getElementById("goalsBox"),
+  strategiesBoxEl: document.getElementById("strategiesBox"),
+  timelineBoxEl: document.getElementById("timelineBox"),
+  financeBoxEl: document.getElementById("financeBox"),
+  jsonBoxEl: document.getElementById("jsonBox"),
+
+  loadingEl: document.getElementById("pledgeLoading"),
+  loadingTextEl: document.getElementById("pledgeLoadingText"),
 };
 
-const messageEl = document.getElementById("pledgeMessage");
-const pledgeForm = document.getElementById("pledgeForm");
-const candidateElectionSelect = document.getElementById("candidateElectionId");
-const savePledgeBtn = document.getElementById("savePledgeBtn");
-const pledgeTitleInput = document.getElementById("pledgeTitle");
-const pledgeSortOrderInput = document.getElementById("pledgeSortOrder");
-const pledgeRawTextPlainInput = document.getElementById("pledgeRawTextPlain");
-const pledgeRawTextGuidedInput = document.getElementById("pledgeRawTextGuided");
-const pledgeCategoryInput = document.getElementById("pledgeCategory");
-const loadingEl = document.getElementById("pledgeLoading");
-const loadingTextEl = document.getElementById("pledgeLoadingText");
-const editorValidationMessageEl = document.getElementById("editorValidationMessage");
-const editorModeTabs = Array.from(document.querySelectorAll(".editor-mode-tab"));
-const editorPanels = Array.from(document.querySelectorAll(".editor-panel"));
-const goalMenuToggleBtn = document.querySelector("[data-goal-menu-toggle]");
-const goalOptionMenuEl = document.getElementById("goalOptionMenu");
-const blogNodeTypeSelect = document.getElementById("blogNodeType");
-const blogGoalTypeSelect = document.getElementById("blogGoalType");
-const blogGoalTypeField = document.getElementById("blogGoalTypeField");
-const blogParentGoalField = document.getElementById("blogParentGoalField");
-const blogParentGoalSelect = document.getElementById("blogParentGoalSelect");
-const blogParentPromiseField = document.getElementById("blogParentPromiseField");
-const blogParentPromiseSelect = document.getElementById("blogParentPromiseSelect");
-const blogNodeTextField = document.getElementById("blogNodeTextField");
-const blogNodeTextInput = document.getElementById("blogNodeText");
-const addBlogNodeBtn = document.getElementById("addBlogNodeBtn");
-const blogStructureTreeEl = document.getElementById("blogStructureTree");
-const addPledgeSourceBtn = document.getElementById("addPledgeSourceBtn");
-const pledgeSourceListEl = document.getElementById("pledgeSourceList");
+const state = {
+  loadingCount: 0,
+  candidateRows: [],
+  electionRows: [],
+  candidateElectionRows: [],
+  candidateMap: new Map(),
+  electionMap: new Map(),
 
-let candidates = [];
-let elections = [];
-let candidateElections = [];
-let loadingCount = 0;
-let activeEditorMode = "paste";
-let blogDraftGoals = [];
-let blogGoalSeq = 1;
-let blogPromiseSeq = 1;
-let blogItemSeq = 1;
-const GOAL_OPTION_OTHER = "\uae30\ud0c0";
-let pledgeSourceSeq = 1;
-let pledgeSourceDraftRows = [];
-let reusableSourceRows = [];
-const SOURCE_ROLE_OPTIONS = ["공식 공약집", "보조 근거", "참고 출처", "관련 자료"];
-const SOURCE_TYPE_OPTIONS = ["정부", "언론", "보고서", "연구", "예산", "보도자료", "연설", "법령", "기타"];
-const SOURCE_LINK_SCOPE_PLEDGE = "pledge";
-const SOURCE_LINK_SCOPE_GOAL = "goal";
-const SOURCE_MODE_NEW = "new";
-const SOURCE_MODE_REUSE = "reuse";
+  selectedCandidateOption: null,
+  visibleCandidateOptions: [],
+  activeCandidateOptionIndex: -1,
+  candidateSearchBlurTimer: null,
 
-function setMessage(text, type = "info") {
-  if (!messageEl) return;
-  messageEl.className = `pledge-message ${type}`;
-  messageEl.textContent = text;
+  activeEditorTab: "free",
+  latestParsedModel: null,
+  structuredItems: {
+    goal: [],
+    method: [],
+    timeline: [],
+    finance: [],
+  },
+};
+
+const CIRCLED_NUMBERS = [
+  "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩",
+  "⑪", "⑫", "⑬", "⑭", "⑮", "⑯", "⑰", "⑱", "⑲", "⑳",
+];
+
+const STRUCTURED_TOPICS = ["goal", "method", "timeline", "finance"];
+const STRUCTURED_TOPIC_LABELS = {
+  goal: "목표",
+  method: "이행방법",
+  timeline: "이행기간",
+  finance: "재원조달방안 등",
+};
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
-function setLoading(isLoading, text = TEXT.processing) {
-  if (!loadingEl) return;
-  if (isLoading) {
-    loadingCount += 1;
-    if (loadingTextEl) loadingTextEl.textContent = text;
-    loadingEl.hidden = false;
-    return;
-  }
-  loadingCount = Math.max(0, loadingCount - 1);
-  if (loadingCount === 0) loadingEl.hidden = true;
+function setCandidateSearchHelp(text, type = "info") {
+  if (!dom.candidateSearchHelp) return;
+  dom.candidateSearchHelp.classList.remove("warning", "success");
+  if (type === "warning") dom.candidateSearchHelp.classList.add("warning");
+  if (type === "success") dom.candidateSearchHelp.classList.add("success");
+  dom.candidateSearchHelp.textContent = text;
 }
 
-async function apiGet(url) {
-  const resp = await fetch(url);
-  const raw = await resp.text();
-  let payload = {};
-  try {
-    payload = raw ? JSON.parse(raw) : {};
-  } catch (error) {
-    payload = {};
-  }
-  if (!resp.ok) {
-    const fallback = raw ? raw.slice(0, 200) : `${TEXT.requestFail} (HTTP ${resp.status})`;
-    throw new Error(payload.error || fallback);
-  }
-  return payload;
+function hideCandidateDropdown() {
+  if (!dom.candidateSearchDropdown) return;
+  dom.candidateSearchDropdown.hidden = true;
+  state.activeCandidateOptionIndex = -1;
 }
 
-async function apiPost(url, body) {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
+function setActiveCandidateOption(index) {
+  const optionEls = Array.from(dom.candidateSearchDropdown?.querySelectorAll("[data-candidate-option-index]") || []);
+  optionEls.forEach((el) => {
+    const isActive = Number(el.dataset.candidateOptionIndex) === index;
+    el.classList.toggle("is-active", isActive);
   });
-  const raw = await resp.text();
-  let payload = {};
-  try {
-    payload = raw ? JSON.parse(raw) : {};
-  } catch (error) {
-    payload = {};
-  }
-  if (!resp.ok) {
-    const fallback = raw ? raw.slice(0, 200) : `${TEXT.requestFail} (HTTP ${resp.status})`;
-    throw new Error(payload.error || fallback);
-  }
-  return payload;
+  state.activeCandidateOptionIndex = index;
 }
 
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+function selectedElectionId() {
+  return String(dom.electionSelect?.value || "").trim();
 }
 
-function cleanText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
+function getCandidateOptionsForElection(electionId) {
+  const electionKey = String(electionId || "").trim();
+  if (!electionKey) return [];
 
-function stripHeadingDecoration(value) {
-  return String(value || "").trim().replace(/^#{1,6}\s+/, "");
-}
-
-function isBulletLine(value) {
-  return /^([-*]|\d+[.)])\s+/.test(String(value || "").trim());
-}
-
-function stripBullet(value) {
-  return String(value || "").trim().replace(/^([-*]|\d+[.)])\s+/, "");
-}
-
-function splitBlocks(text) {
-  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
-  const blocks = [];
-  let current = [];
-  lines.forEach((line) => {
-    if (!line.trim()) {
-      if (current.length) {
-        blocks.push(current);
-        current = [];
-      }
-      return;
-    }
-    current.push(line.trim());
-  });
-  if (current.length) blocks.push(current);
-  return blocks;
-}
-
-function getActiveEditorInput() {
-  return activeEditorMode === "guided" ? pledgeRawTextGuidedInput : pledgeRawTextPlainInput;
-}
-
-function nextBlogId(type) {
-  if (type === "goal") return `g-${blogGoalSeq++}`;
-  if (type === "promise") return `p-${blogPromiseSeq++}`;
-  return `i-${blogItemSeq++}`;
-}
-
-function normalizeBlogGoalTitle(sectionType) {
-  const typeLabel = cleanText(sectionType);
-  if (!typeLabel) return "";
-  if (typeLabel === "목표") return "목 표";
-  return typeLabel;
-}
-
-function goalsToBlogDraft(goals) {
-  blogGoalSeq = 1;
-  blogPromiseSeq = 1;
-  blogItemSeq = 1;
-  const nextGoals = [];
-  (goals || []).forEach((goal) => {
-    const goalTitle = cleanText(goal?.title || "");
-    if (!goalTitle) return;
-    const nextGoal = { id: nextBlogId("goal"), title: goalTitle, promises: [] };
-    (goal.promises || []).forEach((promise) => {
-      const promiseTitle = cleanText(promise?.title || "");
-      if (!promiseTitle) return;
-      const nextPromise = { id: nextBlogId("promise"), title: promiseTitle, items: [] };
-      (promise.items || []).forEach((item) => {
-        const itemText = cleanText(item?.detail || "");
-        if (!itemText) return;
-        nextPromise.items.push({ id: nextBlogId("item"), detail: itemText });
-      });
-      nextGoal.promises.push(nextPromise);
-    });
-    nextGoals.push(nextGoal);
-  });
-  return nextGoals;
-}
-
-function setBlogDraftFromGoals(goals) {
-  blogDraftGoals = goalsToBlogDraft(goals);
-  syncBlogRawTextFromDraft();
-  populateBlogSelects();
-  syncBlogComposerState();
-  renderBlogStructureTree();
-  renderPledgeSourceDraftRows();
-}
-
-function serializeBlogDraft() {
-  return serializeTree(blogDraftGoals).trim();
-}
-
-function syncBlogRawTextFromDraft() {
-  if (!pledgeRawTextPlainInput) return;
-  pledgeRawTextPlainInput.value = serializeBlogDraft();
-}
-
-function populateBlogSelects() {
-  if (blogParentGoalSelect) {
-    const goalOptions = blogDraftGoals.length
-      ? blogDraftGoals.map((goal, idx) => `<option value="${goal.id}">${escapeHtml(`${idx + 1}. ${goal.title}`)}</option>`).join("")
-      : `<option value="">${TEXT.blogNeedGoal}</option>`;
-    const currentGoalId = blogParentGoalSelect.value;
-    blogParentGoalSelect.innerHTML = goalOptions;
-    if (currentGoalId) blogParentGoalSelect.value = currentGoalId;
-  }
-
-  if (blogParentPromiseSelect) {
-    const promiseOptions = [];
-    blogDraftGoals.forEach((goal) => {
-      (goal.promises || []).forEach((promise, idx) => {
-        const label = `${goal.title} > ${idx + 1}. ${promise.title}`;
-        promiseOptions.push(`<option value="${promise.id}">${escapeHtml(label)}</option>`);
-      });
-    });
-    const currentPromiseId = blogParentPromiseSelect.value;
-    blogParentPromiseSelect.innerHTML = promiseOptions.length
-      ? promiseOptions.join("")
-      : `<option value="">${TEXT.blogNeedPromise}</option>`;
-    if (currentPromiseId) blogParentPromiseSelect.value = currentPromiseId;
-  }
-}
-
-function syncBlogComposerState() {
-  const type = cleanText(blogNodeTypeSelect?.value || "goal").toLowerCase();
-  const isGoal = type === "goal";
-  const isPromise = type === "promise";
-  const isItem = type === "item";
-
-  if (blogGoalTypeField) blogGoalTypeField.hidden = !isGoal;
-  if (blogParentGoalField) blogParentGoalField.hidden = !isPromise;
-  if (blogParentPromiseField) blogParentPromiseField.hidden = !isItem;
-  if (blogNodeTextField) blogNodeTextField.hidden = isGoal;
-
-  if (blogNodeTextInput) {
-    if (isPromise) blogNodeTextInput.placeholder = "중항목 내용을 입력하세요";
-    else if (isItem) blogNodeTextInput.placeholder = "세부항목 내용을 입력하세요";
-    else blogNodeTextInput.placeholder = "";
-  }
-
-  if (addBlogNodeBtn) {
-    if (isGoal) addBlogNodeBtn.textContent = "대항목 등록";
-    else if (isPromise) addBlogNodeBtn.textContent = "중항목 등록";
-    else addBlogNodeBtn.textContent = "세부항목 등록";
-  }
-}
-
-function renderBlogStructureTree() {
-  if (!blogStructureTreeEl) return;
-  if (!blogDraftGoals.length) {
-    blogStructureTreeEl.innerHTML = `<p class="blog-empty">${TEXT.blogEmpty}</p>`;
-    return;
-  }
-  blogStructureTreeEl.innerHTML = blogDraftGoals.map((goal, goalIdx) => `
-    <section class="blog-node goal">
-      <header class="blog-node-head">
-        <span class="blog-badge">대항목 ${goalIdx + 1}</span>
-        <strong>${escapeHtml(goal.title)}</strong>
-        <button type="button" class="blog-delete-btn" data-blog-action="delete-goal" data-goal-id="${goal.id}">삭제</button>
-      </header>
-      ${(goal.promises || []).length ? `
-        <div class="blog-node-children">
-          ${(goal.promises || []).map((promise, promiseIdx) => `
-            <article class="blog-node promise">
-              <header class="blog-node-head">
-                <span class="blog-badge">중항목 ${promiseIdx + 1}</span>
-                <strong>${escapeHtml(promise.title)}</strong>
-                <button type="button" class="blog-delete-btn" data-blog-action="delete-promise" data-goal-id="${goal.id}" data-promise-id="${promise.id}">삭제</button>
-              </header>
-              ${(promise.items || []).length ? `
-                <ul class="blog-item-list">
-                  ${(promise.items || []).map((item) => `
-                    <li>
-                      <span>${escapeHtml(item.detail)}</span>
-                      <button type="button" class="blog-delete-btn" data-blog-action="delete-item" data-goal-id="${goal.id}" data-promise-id="${promise.id}" data-item-id="${item.id}">삭제</button>
-                    </li>
-                  `).join("")}
-                </ul>
-              ` : `<p class="blog-empty-inline">${TEXT.noItems}</p>`}
-            </article>
-          `).join("")}
-        </div>
-      ` : `<p class="blog-empty-inline">${TEXT.noPromises}</p>`}
-    </section>
-  `).join("");
-}
-
-function setGuidedValidation(message = "") {
-  if (!editorValidationMessageEl) return;
-  editorValidationMessageEl.textContent = message;
-  editorValidationMessageEl.hidden = !message;
-}
-
-function focusEditor() {
-  if (activeEditorMode === "paste") {
-    const type = cleanText(blogNodeTypeSelect?.value || "goal").toLowerCase();
-    if (type === "goal") blogGoalTypeSelect?.focus();
-    else blogNodeTextInput?.focus();
-    return;
-  }
-  getActiveEditorInput()?.focus();
-}
-
-function syncEditors(fromMode, toMode) {
-  if (fromMode === toMode) return;
-  if (fromMode === "guided" && toMode === "paste") {
-    const parsedGoals = parseEditorText(pledgeRawTextGuidedInput?.value || "");
-    setBlogDraftFromGoals(parsedGoals);
-    return;
-  }
-  if (fromMode === "paste" && toMode === "guided") {
-    syncBlogRawTextFromDraft();
-    if (pledgeRawTextGuidedInput) pledgeRawTextGuidedInput.value = pledgeRawTextPlainInput?.value || "";
-  }
-}
-
-function openGoalMenu() {
-  if (!goalOptionMenuEl || !goalMenuToggleBtn || activeEditorMode !== "guided") return;
-  goalOptionMenuEl.hidden = false;
-  goalMenuToggleBtn.setAttribute("aria-expanded", "true");
-}
-
-function closeGoalMenu() {
-  if (!goalOptionMenuEl || !goalMenuToggleBtn) return;
-  goalOptionMenuEl.hidden = true;
-  goalMenuToggleBtn.setAttribute("aria-expanded", "false");
-}
-
-function toggleGoalMenu() {
-  if (!goalOptionMenuEl || !goalMenuToggleBtn || activeEditorMode !== "guided") return;
-  if (goalOptionMenuEl.hidden) {
-    openGoalMenu();
-    return;
-  }
-  closeGoalMenu();
-}
-
-function resolveGoalOption(optionValue) {
-  const label = cleanText(optionValue);
-  if (!label) return null;
-  if (label !== GOAL_OPTION_OTHER) return label;
-  const custom = window.prompt(TEXT.goalOtherPrompt, "");
-  if (custom === null) return null;
-  const customLabel = cleanText(custom);
-  if (!customLabel) {
-    setGuidedValidation(TEXT.goalOtherRequired);
-    return null;
-  }
-  return customLabel;
-}
-
-function insertGoalOption(label) {
-  const title = cleanText(label);
-  if (!title) return;
-  insertIntoEditor(`\u25a1 ${title} `, "line");
-}
-
-function setEditorMode(mode) {
-  activeEditorMode = mode === "guided" ? "guided" : "paste";
-  if (activeEditorMode !== "guided") closeGoalMenu();
-  editorModeTabs.forEach((button) => {
-    const isActive = button.dataset.editorMode === activeEditorMode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-selected", isActive ? "true" : "false");
-  });
-  editorPanels.forEach((panel) => {
-    const isActive = panel.dataset.editorPanel === activeEditorMode;
-    panel.classList.toggle("active", isActive);
-    panel.classList.toggle("is-active", isActive);
-    panel.hidden = !isActive;
-  });
-  setGuidedValidation(activeEditorMode === "guided" ? validateGuidedEditor(pledgeRawTextGuidedInput?.value || "") : "");
-  renderPledgeSourceDraftRows();
-}
-
-function getLineContext(value, cursor) {
-  const safeCursor = Math.max(0, Math.min(cursor, value.length));
-  const lineStart = value.lastIndexOf("\n", safeCursor - 1) + 1;
-  const lineEndIndex = value.indexOf("\n", safeCursor);
-  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
-  const line = value.slice(lineStart, lineEnd);
-  return { lineStart, lineEnd, line };
-}
-
-function getLeadingToken(line) {
-  if (line.startsWith(" \u25a1 ")) return " \u25a1 ";
-  if (line.startsWith(" \u25cb ")) return " \u25cb ";
-  if (line.startsWith(" - ")) return " - ";
-  if (line.startsWith("\u25a1 ")) return "\u25a1 ";
-  if (line.startsWith("\u25cb ")) return "\u25cb ";
-  if (line.startsWith("- ")) return "- ";
-  return "";
-}
-
-function validateGuidedEditor(text) {
-  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
-  for (const rawLine of lines) {
-    const line = String(rawLine || "");
-    if (!line) continue;
-    const normalized = line.trimStart();
-    if (/^(?:\u25a1|\u25cb|-)\s*$/.test(normalized)) return TEXT.guidedNeedTextAfterMarker;
-  }
-  return "";
-}
-
-function insertIntoEditor(token, mode = "cursor") {
-  if (!pledgeRawTextGuidedInput) return;
-
-  const input = pledgeRawTextGuidedInput;
-  const value = input.value || "";
-  const start = input.selectionStart ?? value.length;
-  const end = input.selectionEnd ?? start;
-  let chunk = token;
-
-  if (mode === "line") {
-    const before = value.slice(0, start);
-    const after = value.slice(end);
-    const needsLeadingBreak = before.length > 0 && !before.endsWith("\n");
-    const needsTrailingBreak = after.length > 0 && !after.startsWith("\n");
-    chunk = `${needsLeadingBreak ? "\n" : ""}${token}${needsTrailingBreak ? "\n" : ""}`;
-  }
-
-  const nextValue = `${value.slice(0, start)}${chunk}${value.slice(end)}`;
-  const caret = start + chunk.length;
-  input.value = nextValue;
-  input.focus();
-  input.setSelectionRange(caret, caret);
-  setGuidedValidation(validateGuidedEditor(nextValue));
-}
-
-function handleEditorShortcut(event) {
-  if (!pledgeRawTextGuidedInput || event.defaultPrevented || !event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) return;
-
-  if (event.key === "1") {
-    event.preventDefault();
-    insertIntoEditor("\u25a1 \ubaa9 \ud45c ", "line");
-  } else if (event.key === "2") {
-    event.preventDefault();
-    insertIntoEditor("\u25cb ", "line");
-  } else if (event.key === "3") {
-    event.preventDefault();
-    insertIntoEditor("- ", "line");
-  }
-}
-
-function parseMarkedLines(lines) {
-  const goals = [];
-  let currentGoal = null;
-  let currentPromise = null;
-  let currentItem = null;
-
-  lines.forEach((rawLine) => {
-    const line = String(rawLine || "").trim();
-    if (!line) {
-      currentItem = null;
-      return;
-    }
-
-    if (/^\u25a1\s+/.test(line)) {
-      const title = cleanText(line.replace(/^\u25a1\s+/, ""));
-      if (!title) return;
-      currentGoal = { title, promises: [] };
-      goals.push(currentGoal);
-      currentPromise = null;
-      currentItem = null;
-      return;
-    }
-
-    if (/^\u25cb\s+/.test(line)) {
-      const title = cleanText(line.replace(/^\u25cb\s+/, ""));
-      if (!title) return;
-      if (!currentGoal) {
-        currentGoal = { title: TEXT.defaultGoal, promises: [] };
-        goals.push(currentGoal);
-      }
-      currentPromise = { title, items: [] };
-      currentGoal.promises.push(currentPromise);
-      currentItem = null;
-      return;
-    }
-
-    if (/^-\s+/.test(line) || isBulletLine(line)) {
-      const detail = cleanText(stripBullet(line));
-      if (!detail) return;
-      if (!currentGoal) {
-        currentGoal = { title: TEXT.defaultGoal, promises: [] };
-        goals.push(currentGoal);
-      }
-      if (!currentPromise) {
-        currentPromise = { title: TEXT.defaultPromise, items: [] };
-        currentGoal.promises.push(currentPromise);
-      }
-      currentItem = { detail };
-      currentPromise.items.push(currentItem);
-      return;
-    }
-
-    const content = cleanText(stripHeadingDecoration(line));
-    if (!content) return;
-    if (currentItem) {
-      currentItem.detail = `${currentItem.detail} ${content}`.trim();
-      return;
-    }
-    if (currentPromise) {
-      currentPromise.title = `${currentPromise.title} ${content}`.trim();
-      return;
-    }
-    if (currentGoal) {
-      currentGoal.title = `${currentGoal.title} ${content}`.trim();
-      return;
-    }
-    currentGoal = { title: content, promises: [] };
-    goals.push(currentGoal);
-  });
-
-  return goals.filter((goal) => cleanText(goal.title));
-}
-function parseBlogBlocks(blocks) {
-  const goals = [];
-  let currentGoal = null;
-
-  blocks.forEach((block) => {
-    const lines = block.map((line) => String(line || "").trim()).filter(Boolean);
-    if (!lines.length) return;
-    const proseLines = lines.filter((line) => !isBulletLine(line));
-    const bulletLines = lines.filter((line) => isBulletLine(line));
-
-    if (!currentGoal) {
-      const goalTitle = cleanText(stripHeadingDecoration(proseLines[0] || stripBullet(lines[0])));
-      if (!goalTitle) return;
-      currentGoal = { title: goalTitle, promises: [] };
-      goals.push(currentGoal);
-
-      const remainingProse = proseLines.slice(proseLines.length ? 1 : 0).map((line) => cleanText(stripHeadingDecoration(line))).filter(Boolean);
-      if (remainingProse.length || bulletLines.length) {
-        const promise = { title: remainingProse.shift() || TEXT.defaultPromise, items: [] };
-        remainingProse.forEach((line) => promise.items.push({ detail: line }));
-        bulletLines.forEach((line) => promise.items.push({ detail: cleanText(stripBullet(line)) }));
-        if (cleanText(promise.title) || promise.items.length) currentGoal.promises.push(promise);
-      }
-      return;
-    }
-
-    if (proseLines.length) {
-      const promise = { title: cleanText(stripHeadingDecoration(proseLines[0])), items: [] };
-      proseLines.slice(1).map((line) => cleanText(stripHeadingDecoration(line))).filter(Boolean).forEach((line) => promise.items.push({ detail: line }));
-      bulletLines.map((line) => cleanText(stripBullet(line))).filter(Boolean).forEach((line) => promise.items.push({ detail: line }));
-      if (cleanText(promise.title)) currentGoal.promises.push(promise);
-      return;
-    }
-
-    bulletLines.map((line) => cleanText(stripBullet(line))).filter(Boolean).forEach((line) => currentGoal.promises.push({ title: line, items: [] }));
-  });
-
-  return goals.filter((goal) => cleanText(goal.title));
-}
-
-function parseEditorText(text) {
-  const blocks = splitBlocks(text);
-  if (!blocks.length) return [];
-  const flatLines = blocks.flat();
-  const hasExplicitMarkers = flatLines.some((line) => /^(?:\u25a1|\u25cb)\s+/.test(String(line || "").trim()));
-  return hasExplicitMarkers ? parseMarkedLines(flatLines) : parseBlogBlocks(blocks);
-}
-
-function serializeTree(goals) {
-  const lines = [];
-  goals.forEach((goal) => {
-    if (!cleanText(goal.title)) return;
-    lines.push(`\u25a1 ${cleanText(goal.title)}`);
-    (goal.promises || []).forEach((promise) => {
-      if (!cleanText(promise.title)) return;
-      lines.push(`\u25cb ${cleanText(promise.title)}`);
-      (promise.items || []).forEach((item) => {
-        if (!cleanText(item.detail)) return;
-        lines.push(`- ${cleanText(item.detail)}`);
-      });
-    });
-  });
-  return lines.join("\n");
-}
-
-function getParsedModel(text) {
-  const goals = parseEditorText(text);
-  const normalizedText = serializeTree(goals).trim();
-  return { goals, normalizedText };
-}
-
-function normalizeNodeSourceRole(value) {
-  const raw = cleanText(value);
-  const compact = raw.toLowerCase().replace(/\s+/g, "");
-  const mapping = {
-    "공식공약집": "원문출처",
-    "원문출처": "원문출처",
-    "보조근거": "참고출처",
-    "참고출처": "참고출처",
-    "관련자료": "관련자료",
-    "관련출처": "관련자료",
-  };
-  return mapping[compact] || "참고출처";
-}
-
-function normalizeSourceTypeForApi(value) {
-  const raw = cleanText(value);
-  return raw || "기타";
-}
-
-function getReusablePledgeOptions() {
-  if (!Array.isArray(reusableSourceRows) || !reusableSourceRows.length) return [];
-  const byId = new Map();
-  reusableSourceRows.forEach((row) => {
-    (row?.links || []).forEach((link) => {
-      const pledgeId = cleanText(link?.pledge_id || "");
-      if (!pledgeId || byId.has(pledgeId)) return;
-      const pledgeTitle = cleanText(link?.pledge_title || "") || `공약 ${pledgeId}`;
-      byId.set(pledgeId, { value: pledgeId, label: pledgeTitle });
-    });
-  });
-  return Array.from(byId.values());
-}
-
-function getReusableSourceOptions(reusePledgeId = "") {
-  if (!Array.isArray(reusableSourceRows) || !reusableSourceRows.length) return [];
-  const pledgeIdFilter = cleanText(reusePledgeId || "");
-  return reusableSourceRows.map((row, idx) => {
-    const links = Array.isArray(row?.links) ? row.links : [];
-    if (pledgeIdFilter) {
-      const matched = links.some((link) => String(link?.pledge_id || "") === pledgeIdFilter);
-      if (!matched) return null;
-    }
-    const title = cleanText(row?.title || "") || `기존 출처 ${idx + 1}`;
-    const sourceType = cleanText(row?.source_type || "");
-    const publisher = cleanText(row?.publisher || "");
-    const used = Number(row?.usage_count || 0);
-    const representativePledge = cleanText((links[0] || {})?.pledge_title || "");
-    const parts = [title];
-    if (representativePledge) parts.push(`공약: ${representativePledge}`);
-    if (publisher) parts.push(publisher);
-    if (sourceType) parts.push(sourceType);
-    if (used > 0) parts.push(`사용 ${used}회`);
-    return {
-      value: String(row?.source_id || ""),
-      label: parts.join(" · "),
-    };
-  }).filter((row) => row && row.value);
-}
-
-function findReusableSourceRow(sourceId, reusePledgeId = "") {
-  const id = cleanText(sourceId);
-  if (!id) return null;
-  const pledgeIdFilter = cleanText(reusePledgeId || "");
-  return reusableSourceRows.find((row) => {
-    if (String(row?.source_id || "") !== id) return false;
-    if (!pledgeIdFilter) return true;
-    return (row?.links || []).some((link) => String(link?.pledge_id || "") === pledgeIdFilter);
-  }) || null;
-}
-
-function applyReusableSourceToDraftRow(row, sourceId) {
-  if (!row) return;
-  const source = findReusableSourceRow(sourceId, row.reusePledgeId);
-  if (!source) return;
-  row.sourceId = String(source.source_id || "");
-  row.title = cleanText(source.title || row.title || "");
-  row.url = cleanText(source.url || "");
-  row.sourceType = cleanText(source.source_type || row.sourceType || SOURCE_TYPE_OPTIONS[0]) || SOURCE_TYPE_OPTIONS[0];
-  row.publisher = cleanText(source.publisher || "");
-  row.publishedAt = cleanText(source.published_at || "");
-  row.summary = cleanText(source.summary || "");
-  if (!cleanText(row.note)) row.note = cleanText(source.note || "");
-}
-
-async function refreshReusableSources() {
-  const candidateElectionId = cleanText(candidateElectionSelect?.value || "");
-  if (!candidateElectionId) {
-    reusableSourceRows = [];
-    pledgeSourceDraftRows.forEach((row) => {
-      row.sourceMode = SOURCE_MODE_NEW;
-      row.sourceId = "";
-    });
-    renderPledgeSourceDraftRows();
-    return;
-  }
-  const payload = await apiGet(`/api/pledges/source-library?candidate_election_id=${encodeURIComponent(candidateElectionId)}`);
-  reusableSourceRows = Array.isArray(payload?.rows) ? payload.rows : [];
-  if (!reusableSourceRows.length) {
-    pledgeSourceDraftRows.forEach((row) => {
-      if (cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE) {
-        row.sourceMode = SOURCE_MODE_NEW;
-      }
-      row.sourceId = "";
-    });
-    renderPledgeSourceDraftRows();
-    return;
-  }
-  const pledgeOptions = getReusablePledgeOptions();
-  const defaultReusePledgeId = pledgeOptions[0]?.value || "";
-  pledgeSourceDraftRows.forEach((row) => {
-    if (cleanText(row.sourceMode || SOURCE_MODE_NEW) !== SOURCE_MODE_REUSE) return;
-    if (!cleanText(row.reusePledgeId) && defaultReusePledgeId) {
-      row.reusePledgeId = defaultReusePledgeId;
-    }
-    const sourceOptions = getReusableSourceOptions(row.reusePledgeId);
-    if (!cleanText(row.sourceId) && sourceOptions.length) {
-      applyReusableSourceToDraftRow(row, sourceOptions[0]?.value);
-      return;
-    }
-    if (cleanText(row.sourceId)) applyReusableSourceToDraftRow(row, row.sourceId);
-  });
-  renderPledgeSourceDraftRows();
-}
-
-function getSourceTargetGoals() {
-  if (activeEditorMode === "guided") {
-    return parseEditorText(pledgeRawTextGuidedInput?.value || "");
-  }
-  return blogDraftGoals || [];
-}
-
-function getPledgeSourceTargetOptions() {
   const options = [];
-  const goals = getSourceTargetGoals();
+  for (const row of state.candidateElectionRows) {
+    if (String(row?.election_id || "") !== electionKey) continue;
+    const candidateId = String(row?.candidate_id || "").trim();
+    const candidateElectionId = String(row?.id || "").trim();
+    if (!candidateId || !candidateElectionId) continue;
+    const candidate = state.candidateMap.get(candidateId) || {};
+    const name = String(candidate?.name || "").trim() || "이름 없음";
+    options.push({
+      candidateElectionId,
+      candidateId,
+      name,
+      searchableText: normalizeText(name),
+    });
+  }
 
-  goals.forEach((goal, goalIdx) => {
-    const goalTitle = cleanText(goal?.title || "") || `대항목 ${goalIdx + 1}`;
-    const goalPath = `g:${goalIdx + 1}`;
-    options.push({ value: goalPath, label: `${goalIdx + 1}. ${goalTitle}` });
+  options.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  return options;
+}
+
+function renderCandidateDropdown(query = "") {
+  if (!dom.candidateSearchDropdown) return;
+  const electionId = selectedElectionId();
+  if (!electionId) {
+    hideCandidateDropdown();
+    return;
+  }
+
+  const options = getCandidateOptionsForElection(electionId);
+  const normalizedQuery = normalizeText(query);
+  const filtered = normalizedQuery
+    ? options.filter((option) => option.searchableText.includes(normalizedQuery))
+    : options;
+
+  state.visibleCandidateOptions = filtered;
+  state.activeCandidateOptionIndex = -1;
+
+  if (!filtered.length) {
+    dom.candidateSearchDropdown.innerHTML = '<div class="candidate-option-empty">조건에 맞는 후보자가 없습니다.</div>';
+    dom.candidateSearchDropdown.hidden = false;
+    return;
+  }
+
+  dom.candidateSearchDropdown.innerHTML = filtered
+    .map((option, index) => {
+      const safeName = utils.escapeHtml(option.name);
+      const safeId = utils.escapeHtml(option.candidateElectionId);
+      return `
+        <button
+          type="button"
+          class="candidate-option"
+          role="option"
+          data-candidate-option-index="${index}"
+          data-candidate-election-id="${safeId}">
+          ${safeName}
+        </button>
+      `;
+    })
+    .join("");
+  dom.candidateSearchDropdown.hidden = false;
+}
+
+function clearSelectedCandidate({ clearInput = false } = {}) {
+  state.selectedCandidateOption = null;
+  if (dom.candidateElectionIdInput) dom.candidateElectionIdInput.value = "";
+  if (clearInput && dom.candidateSearchInput) dom.candidateSearchInput.value = "";
+}
+
+function selectCandidateOption(option) {
+  state.selectedCandidateOption = option;
+  if (dom.candidateElectionIdInput) dom.candidateElectionIdInput.value = option.candidateElectionId;
+  if (dom.candidateSearchInput) dom.candidateSearchInput.value = option.name;
+  hideCandidateDropdown();
+  setCandidateSearchHelp(`선택된 후보자: ${option.name}`, "success");
+}
+
+function updateCandidateSearchAvailability() {
+  const electionId = selectedElectionId();
+  const hasElection = Boolean(electionId);
+
+  if (!dom.candidateSearchInput) return;
+
+  dom.candidateSearchInput.disabled = !hasElection;
+  dom.candidateSearchInput.placeholder = hasElection
+    ? "이름을 입력해 후보자를 선택해 주세요"
+    : "선거를 먼저 선택해 주세요";
+
+  clearSelectedCandidate({ clearInput: true });
+  hideCandidateDropdown();
+
+  if (!hasElection) {
+    setCandidateSearchHelp("선거를 먼저 선택한 뒤 후보자를 검색해 주세요.");
+    return;
+  }
+
+  const optionCount = getCandidateOptionsForElection(electionId).length;
+  if (!optionCount) {
+    setCandidateSearchHelp("선택한 선거에 등록된 후보자가 없습니다. 먼저 선거 후보 등록을 진행해 주세요.", "warning");
+    return;
+  }
+
+  setCandidateSearchHelp(`후보자 ${optionCount}명이 검색 대상입니다.`);
+}
+
+function populateElectionSelect() {
+  if (!dom.electionSelect) return;
+
+  const selected = String(dom.electionSelect.value || "").trim();
+  const options = state.electionRows
+    .slice()
+    .sort(utils.sortByRecentElection)
+    .map((row) => {
+      const id = String(row?.id || "").trim();
+      if (!id) return "";
+      const label = utils.buildElectionLabel(row);
+      return `<option value="${utils.escapeHtml(id)}">${utils.escapeHtml(label)}</option>`;
+    })
+    .filter(Boolean)
+    .join("");
+
+  dom.electionSelect.innerHTML = `<option value="">선거를 먼저 선택해 주세요</option>${options}`;
+
+  if (selected && state.electionMap.has(selected)) {
+    dom.electionSelect.value = selected;
+  }
+}
+
+function renderStructuredTopicLists() {
+  STRUCTURED_TOPICS.forEach((topic) => {
+    const listEl = dom.structuredTopicListEls[topic];
+    const countEl = dom.structuredTopicCountEls[topic];
+    const rows = state.structuredItems[topic] || [];
+
+    if (countEl) countEl.textContent = String(rows.length);
+    if (!listEl) return;
+
+    if (!rows.length) {
+      listEl.innerHTML = '<li class="structured-empty">아직 추가된 항목이 없습니다.</li>';
+      return;
+    }
+
+    listEl.innerHTML = rows
+      .map((text, index) => {
+        const safeText = utils.escapeHtml(text);
+        return `
+          <li class="structured-item" data-structured-item data-structured-topic="${utils.escapeHtml(topic)}" data-structured-index="${index}">
+            <span class="structured-item-text">${safeText}</span>
+            <button type="button" class="secondary small" data-action="remove-structured-item">삭제</button>
+          </li>
+        `;
+      })
+      .join("");
+  });
+}
+
+function resetStructuredItems() {
+  state.structuredItems = {
+    goal: [],
+    method: [],
+    timeline: [],
+    finance: [],
+  };
+  renderStructuredTopicLists();
+
+  const goalCard = dom.structuredTopicGrid?.querySelector('[data-structured-topic-card="goal"]');
+  if (goalCard instanceof HTMLDetailsElement) {
+    goalCard.open = true;
+  }
+  dom.structuredTopicGrid?.querySelectorAll("details.structured-topic").forEach((el) => {
+    if (el !== goalCard) el.open = false;
+  });
+}
+
+function addStructuredItem(topic, value) {
+  const normalizedTopic = String(topic || "").trim();
+  if (!STRUCTURED_TOPICS.includes(normalizedTopic)) {
+    throw new Error("대제목을 선택해 주세요.");
+  }
+
+  const text = String(value || "").trim();
+  if (!text) {
+    throw new Error("추가할 항목 내용을 입력해 주세요.");
+  }
+
+  state.structuredItems[normalizedTopic].push(text);
+  renderStructuredTopicLists();
+
+  const selectedTopicCard = dom.structuredTopicGrid?.querySelector(`[data-structured-topic-card="${normalizedTopic}"]`);
+  if (selectedTopicCard instanceof HTMLDetailsElement) {
+    selectedTopicCard.open = true;
+    dom.structuredTopicGrid?.querySelectorAll("details.structured-topic[open]").forEach((el) => {
+      if (el !== selectedTopicCard) el.open = false;
+    });
+  }
+
+  state.latestParsedModel = null;
+  updateSourceModeUI();
+}
+
+function collectStructuredInput() {
+  return {
+    goals: (state.structuredItems.goal || []).slice(),
+    methods: (state.structuredItems.method || []).slice(),
+    timeline: (state.structuredItems.timeline || []).slice(),
+    finance: (state.structuredItems.finance || []).slice(),
+  };
+}
+
+function buildRawTextFromStructured(structured) {
+  const goals = structured.goals || [];
+  const methods = structured.methods || [];
+  const timeline = structured.timeline || [];
+  const finance = structured.finance || [];
+
+  const lines = [];
+
+  if (goals.length) {
+    lines.push("목표");
+    goals.forEach((goal) => lines.push(`- ${goal}`));
+  }
+
+  if (methods.length) {
+    if (lines.length) lines.push("");
+    lines.push("이행방법");
+    methods.forEach((method, index) => {
+      const marker = CIRCLED_NUMBERS[index] || `${index + 1}.`;
+      lines.push(`${marker} ${method}`);
+    });
+  }
+
+  if (timeline.length) {
+    if (lines.length) lines.push("");
+    lines.push("이행기간");
+    timeline.forEach((item) => lines.push(`- ${item}`));
+  }
+
+  if (finance.length) {
+    if (lines.length) lines.push("");
+    lines.push("재원조달방안 등");
+    finance.forEach((item) => lines.push(`- ${item}`));
+  }
+
+  return lines.join("\n").trim();
+}
+
+function getActiveSourceMode() {
+  const selected = dom.sourceModeInputs.find((input) => input.checked);
+  return selected?.value === "advanced" ? "advanced" : "basic";
+}
+
+function refreshGoalTargetOptions(parsedModel) {
+  const options = preview.getGoalTargetOptions(parsedModel || null);
+  const targetSelects = Array.from(dom.sourceRowsContainer?.querySelectorAll("[data-source-target-path]") || []);
+
+  targetSelects.forEach((selectEl) => {
+    const currentValue = String(selectEl.value || "").trim();
+    selectEl.innerHTML = `<option value="">목표(goal)를 선택해 주세요</option>${options
+      .map((option) => `<option value="${utils.escapeHtml(option.value)}">${utils.escapeHtml(option.label)}</option>`)
+      .join("")}`;
+    if (currentValue && options.some((option) => option.value === currentValue)) {
+      selectEl.value = currentValue;
+    }
   });
 
   return options;
 }
 
-function createEmptySourceRow() {
-  const pledgeOptions = getReusablePledgeOptions();
-  const reusePledgeId = pledgeOptions[0]?.value || "";
-  const reusableOptions = getReusableSourceOptions(reusePledgeId);
-  const firstReusableId = reusableOptions[0]?.value || "";
-  return {
-    id: `src-${pledgeSourceSeq++}`,
-    linkScope: SOURCE_LINK_SCOPE_PLEDGE,
-    targetPath: "",
-    sourceMode: SOURCE_MODE_NEW,
-    reusePledgeId,
-    sourceId: firstReusableId,
-    sourceRole: SOURCE_ROLE_OPTIONS[0],
-    title: "",
-    url: "",
-    sourceType: SOURCE_TYPE_OPTIONS[0],
-    publisher: "",
-    publishedAt: "",
-    summary: "",
-    note: "",
-  };
-}
+function updateSourceModeUI() {
+  const mode = getActiveSourceMode();
+  const isAdvanced = mode === "advanced";
 
-function renderPledgeSourceDraftRows() {
-  if (!pledgeSourceListEl) return;
+  const targetWrapEls = Array.from(dom.sourceRowsContainer?.querySelectorAll("[data-goal-target-wrap]") || []);
+  targetWrapEls.forEach((wrapEl) => {
+    wrapEl.hidden = !isAdvanced;
+  });
 
-  if (!pledgeSourceDraftRows.length) {
-    pledgeSourceListEl.innerHTML = `<p class="source-empty">${TEXT.sourceEmpty}</p>`;
+  const goalOptions = refreshGoalTargetOptions(state.latestParsedModel);
+
+  if (!dom.sourceModeHelp) return;
+  if (!isAdvanced) {
+    dom.sourceModeHelp.textContent = "기본 모드는 전체 공약 연결입니다.";
     return;
   }
 
-  const targetOptions = getPledgeSourceTargetOptions();
-  const pledgeOptions = getReusablePledgeOptions();
-  pledgeSourceListEl.innerHTML = pledgeSourceDraftRows.map((row, idx) => {
-    const selectedScope = cleanText(row.linkScope || SOURCE_LINK_SCOPE_PLEDGE) === SOURCE_LINK_SCOPE_GOAL
-      ? SOURCE_LINK_SCOPE_GOAL
-      : SOURCE_LINK_SCOPE_PLEDGE;
-    const selectedSourceMode = cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE
-      ? SOURCE_MODE_REUSE
-      : SOURCE_MODE_NEW;
-    const selectedReusePledgeId = cleanText(row.reusePledgeId || "");
-    const reusableOptions = getReusableSourceOptions(selectedReusePledgeId);
-    const selectedSourceId = cleanText(row.sourceId || "");
-    const selectedTargetPath = cleanText(row.targetPath || "");
-    const targetOptionHtml = targetOptions
-      .map((option) => `<option value="${escapeHtml(option.value)}" ${selectedTargetPath === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
+  if (!goalOptions.length) {
+    dom.sourceModeHelp.textContent = "고급 모드는 각 항목 세부 연결입니다. 먼저 구조 분석으로 연결 항목을 준비해 주세요.";
+    return;
+  }
+
+  const labels = goalOptions.map((option) => option.label).join(", ");
+  dom.sourceModeHelp.textContent = `고급 모드는 각 항목 세부 연결입니다. 현재 연결 가능 항목: ${labels}`;
+}
+
+function addSourceRow(initial = {}) {
+  if (!dom.sourceRowTemplate || !dom.sourceRowsContainer) return;
+  const fragment = dom.sourceRowTemplate.content.cloneNode(true);
+  const rowEl = fragment.querySelector("[data-source-row]");
+
+  rowEl.querySelector("[data-source-title]").value = String(initial.title || "");
+  rowEl.querySelector("[data-source-url]").value = String(initial.url || "");
+  rowEl.querySelector("[data-source-type]").value = String(initial.source_type || "");
+  rowEl.querySelector("[data-source-role]").value = String(initial.source_role || "참고출처");
+  rowEl.querySelector("[data-source-publisher]").value = String(initial.publisher || "");
+  rowEl.querySelector("[data-source-published-at]").value = String(initial.published_at || "");
+  rowEl.querySelector("[data-source-summary]").value = String(initial.summary || "");
+  rowEl.querySelector("[data-source-note]").value = String(initial.note || "");
+
+  dom.sourceRowsContainer.appendChild(fragment);
+  refreshSourceRowsUI();
+  updateSourceModeUI();
+}
+
+function sourceMetaTextFromRow(rowEl) {
+  const title = String(rowEl.querySelector("[data-source-title]")?.value || "").trim();
+  const urlRaw = String(rowEl.querySelector("[data-source-url]")?.value || "").trim();
+  if (title) return title;
+  if (urlRaw) {
+    try {
+      return new URL(urlRaw).host || urlRaw;
+    } catch (_err) {
+      return urlRaw;
+    }
+  }
+  return "제목을 입력해 주세요";
+}
+
+function refreshSourceRowsUI() {
+  const rowEls = Array.from(dom.sourceRowsContainer?.querySelectorAll("[data-source-row]") || []);
+  const count = rowEls.length;
+
+  if (dom.sourceEmptyHint) dom.sourceEmptyHint.hidden = count > 0;
+  if (dom.sourceSummaryBar) dom.sourceSummaryBar.hidden = count === 0;
+  if (dom.sourceCountBadge) dom.sourceCountBadge.textContent = `출처 ${count}개`;
+
+  rowEls.forEach((rowEl, index) => {
+    const order = index + 1;
+    rowEl.dataset.sourceIndex = String(order);
+    const labelEl = rowEl.querySelector("[data-source-label]");
+    const metaEl = rowEl.querySelector("[data-source-meta]");
+    if (labelEl) labelEl.textContent = `출처 ${order}`;
+    if (metaEl) metaEl.textContent = sourceMetaTextFromRow(rowEl);
+  });
+
+  if (dom.sourceQuickList) {
+    dom.sourceQuickList.innerHTML = rowEls
+      .map((rowEl, index) => {
+        const order = index + 1;
+        const meta = sourceMetaTextFromRow(rowEl);
+        return `
+          <button type="button" class="source-quick-chip" data-action="jump-source-row" data-source-index="${order}">
+            #${order} ${utils.escapeHtml(meta)}
+          </button>
+        `;
+      })
       .join("");
-    const pledgeOptionHtml = pledgeOptions.length
-      ? pledgeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${selectedReusePledgeId === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")
-      : `<option value="">공약 없음</option>`;
-    const reusableOptionHtml = reusableOptions.length
-      ? reusableOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${selectedSourceId === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")
-      : `<option value="">재사용 가능한 출처 없음</option>`;
-    const scopeOptions = `
-      <option value="${SOURCE_LINK_SCOPE_PLEDGE}" ${selectedScope === SOURCE_LINK_SCOPE_PLEDGE ? "selected" : ""}>공약(pledges.id) 연결</option>
-      <option value="${SOURCE_LINK_SCOPE_GOAL}" ${selectedScope === SOURCE_LINK_SCOPE_GOAL ? "selected" : ""}>대항목(goal) 연결</option>
-    `;
-    const sourceModeOptions = `
-      <option value="${SOURCE_MODE_NEW}" ${selectedSourceMode === SOURCE_MODE_NEW ? "selected" : ""}>새 출처 입력</option>
-      <option value="${SOURCE_MODE_REUSE}" ${selectedSourceMode === SOURCE_MODE_REUSE ? "selected" : ""}>기존 출처 재사용</option>
-    `;
-    const disableSourceInputs = selectedSourceMode === SOURCE_MODE_REUSE ? "disabled" : "";
-    const roleOptions = SOURCE_ROLE_OPTIONS.map((role) => `<option value="${escapeHtml(role)}" ${row.sourceRole === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("");
-    const typeOptions = SOURCE_TYPE_OPTIONS.map((type) => `<option value="${escapeHtml(type)}" ${row.sourceType === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("");
-
-    return `
-      <article class="source-item" data-source-row-id="${row.id}">
-        <div class="source-item-head">
-          <strong>출처 ${idx + 1}</strong>
-          <button type="button" class="source-remove-btn" data-source-action="remove" data-source-row-id="${row.id}">삭제</button>
-        </div>
-        <div class="source-item-grid">
-          <div class="full">
-            <label>연결 범위</label>
-            <select data-source-field="linkScope">${scopeOptions}</select>
-          </div>
-          <div class="full">
-            <label>출처 입력 방식</label>
-            <select data-source-field="sourceMode">${sourceModeOptions}</select>
-          </div>
-          <div class="full" ${selectedSourceMode === SOURCE_MODE_REUSE ? "" : 'style="display:none;"'}>
-            <label>기존 공약 선택</label>
-            <select data-source-field="reusePledgeId" ${pledgeOptions.length ? "" : "disabled"}>${pledgeOptionHtml}</select>
-          </div>
-          <div class="full" ${selectedSourceMode === SOURCE_MODE_REUSE ? "" : 'style="display:none;"'}>
-            <label>기존 출처 선택</label>
-            <select data-source-field="sourceId" ${reusableOptions.length ? "" : "disabled"}>${reusableOptionHtml}</select>
-          </div>
-          <div class="full" ${selectedScope === SOURCE_LINK_SCOPE_GOAL ? "" : 'style="display:none;"'}>
-            <label>연결 대상 대항목(goal)</label>
-            <select data-source-field="targetPath">${targetOptionHtml}</select>
-          </div>
-          <div>
-            <label>출처 역할</label>
-            <select data-source-field="sourceRole">${roleOptions}</select>
-          </div>
-          <div class="full">
-            <label>출처 제목</label>
-            <input type="text" data-source-field="title" value="${escapeHtml(row.title)}" placeholder="예: 제21대 대통령선거 후보자 공약집" ${disableSourceInputs} />
-          </div>
-          <div class="full">
-            <label>URL</label>
-            <input type="url" data-source-field="url" value="${escapeHtml(row.url)}" placeholder="https://..." ${disableSourceInputs} />
-          </div>
-          <div>
-            <label>출처 유형</label>
-            <select data-source-field="sourceType" ${disableSourceInputs}>${typeOptions}</select>
-          </div>
-          <div>
-            <label>발행 기관</label>
-            <input type="text" data-source-field="publisher" value="${escapeHtml(row.publisher)}" placeholder="예: 중앙선거관리위원회" ${disableSourceInputs} />
-          </div>
-          <div>
-            <label>발행일</label>
-            <input type="date" data-source-field="publishedAt" value="${escapeHtml(row.publishedAt)}" ${disableSourceInputs} />
-          </div>
-          <div class="full">
-            <label>요약</label>
-            <input type="text" data-source-field="summary" value="${escapeHtml(row.summary)}" placeholder="출처 요약" ${disableSourceInputs} />
-          </div>
-          <div class="full">
-            <label>메모</label>
-            <input type="text" data-source-field="note" value="${escapeHtml(row.note)}" placeholder="출처 설명 또는 연결 메모" />
-          </div>
-        </div>
-      </article>
-    `;
-  }).join("");
-}
-
-function addPledgeSourceRow() {
-  pledgeSourceDraftRows.push(createEmptySourceRow());
-  renderPledgeSourceDraftRows();
-}
-
-function removePledgeSourceRow(rowId) {
-  pledgeSourceDraftRows = pledgeSourceDraftRows.filter((row) => String(row.id) !== String(rowId));
-  renderPledgeSourceDraftRows();
-}
-
-function updatePledgeSourceRowField(rowId, field, value) {
-  const row = pledgeSourceDraftRows.find((item) => String(item.id) === String(rowId));
-  if (!row || !field) return;
-  if (field === "linkScope") {
-    row.linkScope = cleanText(value) === SOURCE_LINK_SCOPE_GOAL ? SOURCE_LINK_SCOPE_GOAL : SOURCE_LINK_SCOPE_PLEDGE;
-    if (row.linkScope === SOURCE_LINK_SCOPE_PLEDGE) row.targetPath = "";
-    if (row.linkScope === SOURCE_LINK_SCOPE_GOAL && !cleanText(row.targetPath || "")) {
-      const goals = getPledgeSourceTargetOptions();
-      if (goals.length) row.targetPath = goals[0].value;
-    }
-    renderPledgeSourceDraftRows();
-    return;
   }
-  if (field === "sourceMode") {
-    row.sourceMode = cleanText(value) === SOURCE_MODE_REUSE ? SOURCE_MODE_REUSE : SOURCE_MODE_NEW;
-    if (row.sourceMode === SOURCE_MODE_REUSE) {
-      const pledgeOptions = getReusablePledgeOptions();
-      const defaultReusePledgeId = pledgeOptions[0]?.value || "";
-      if (!cleanText(row.reusePledgeId || "") && defaultReusePledgeId) {
-        row.reusePledgeId = defaultReusePledgeId;
-      }
-      const options = getReusableSourceOptions(row.reusePledgeId);
-      if (!options.length) {
-        row.sourceMode = SOURCE_MODE_NEW;
-        setMessage("재사용 가능한 기존 출처가 없습니다. 새 출처를 입력해 주세요.", "info");
-      } else {
-        const preferredId = cleanText(row.sourceId || "") || options[0].value;
-        applyReusableSourceToDraftRow(row, preferredId);
-      }
-    }
-    renderPledgeSourceDraftRows();
-    return;
-  }
-  if (field === "reusePledgeId") {
-    row.reusePledgeId = cleanText(value);
-    const options = getReusableSourceOptions(row.reusePledgeId);
-    if (!options.length) {
-      row.sourceId = "";
-      renderPledgeSourceDraftRows();
-      return;
-    }
-    const nextSourceId = options.some((option) => option.value === cleanText(row.sourceId || ""))
-      ? cleanText(row.sourceId || "")
-      : options[0].value;
-    applyReusableSourceToDraftRow(row, nextSourceId);
-    renderPledgeSourceDraftRows();
-    return;
-  }
-  if (field === "sourceId") {
-    row.sourceId = cleanText(value);
-    if (row.sourceMode === SOURCE_MODE_REUSE) {
-      applyReusableSourceToDraftRow(row, row.sourceId);
-    }
-    renderPledgeSourceDraftRows();
-    return;
-  }
-  row[field] = value;
 }
 
-function resetPledgeSourceRows() {
-  pledgeSourceDraftRows = [];
-  renderPledgeSourceDraftRows();
+function clearSourcesToDefault() {
+  if (!dom.sourceRowsContainer) return;
+  dom.sourceRowsContainer.innerHTML = "";
+  refreshSourceRowsUI();
 }
 
-function collectPledgeSourceRowsForSave() {
-  if (!pledgeSourceDraftRows.length) throw new Error(TEXT.sourceNeedAtLeastOne);
-  const goals = getPledgeSourceTargetOptions();
-  const goalPathSet = new Set(goals.map((goal) => goal.value));
-  const collected = pledgeSourceDraftRows.map((row) => {
-    const linkScope = cleanText(row.linkScope || SOURCE_LINK_SCOPE_PLEDGE) === SOURCE_LINK_SCOPE_GOAL
-      ? SOURCE_LINK_SCOPE_GOAL
-      : SOURCE_LINK_SCOPE_PLEDGE;
-    const sourceMode = cleanText(row.sourceMode || SOURCE_MODE_NEW) === SOURCE_MODE_REUSE
-      ? SOURCE_MODE_REUSE
-      : SOURCE_MODE_NEW;
-    const sourceId = cleanText(row.sourceId || "") || null;
-    const title = cleanText(row.title);
-    if (sourceMode === SOURCE_MODE_REUSE && !sourceId) throw new Error(TEXT.sourceNeedReusable);
-    if (sourceMode !== SOURCE_MODE_REUSE && !title) throw new Error(TEXT.sourceNeedTitle);
+function getCurrentEditorRawText() {
+  if (state.activeEditorTab === "free") {
+    return String(dom.pledgeRawTextInput?.value || "").trim();
+  }
 
-    return {
-      source_id: sourceId,
-      link_scope: linkScope,
-      target_path: linkScope === SOURCE_LINK_SCOPE_GOAL
-        ? (cleanText(row.targetPath || "") || null)
-        : null,
-      source_role: normalizeNodeSourceRole(row.sourceRole),
-      title: title || null,
-      url: cleanText(row.url) || null,
-      source_type: normalizeSourceTypeForApi(row.sourceType),
-      publisher: cleanText(row.publisher) || null,
-      published_at: cleanText(row.publishedAt) || null,
-      summary: cleanText(row.summary) || null,
-      note: cleanText(row.note) || null,
-    };
-  });
-  const goalScopedRows = collected.filter((row) => row.link_scope === SOURCE_LINK_SCOPE_GOAL);
-  if (goalScopedRows.length) {
-    if (!goals.length) throw new Error("대항목(goal)이 없어 goal 연결을 사용할 수 없습니다.");
-    const assigned = new Set();
-    goalScopedRows.forEach((row) => {
-      if (!row.target_path || !goalPathSet.has(row.target_path)) {
-        throw new Error("goal 연결 대상은 대항목(goal)만 선택할 수 있습니다.");
-      }
-      assigned.add(row.target_path);
+  const structured = collectStructuredInput();
+  return buildRawTextFromStructured(structured);
+}
+
+function renderPreviewFromCurrentEditor({ requireText = false } = {}) {
+  const rawText = getCurrentEditorRawText();
+  if (requireText && !rawText && state.activeEditorTab === "structured") {
+    throw new Error("단계별 입력에서 항목을 하나 이상 추가해 주세요.");
+  }
+  const parsedModel = preview.parseRawText(rawText, { requireText });
+  if (!parsedModel) return null;
+
+  parsedModel.raw_text = rawText;
+  state.latestParsedModel = parsedModel;
+
+  preview.renderParsedPreview(parsedModel, dom);
+  refreshGoalTargetOptions(parsedModel);
+  updateSourceModeUI();
+  return parsedModel;
+}
+
+function collectSourcesPayload(parsedModel) {
+  const rows = Array.from(dom.sourceRowsContainer?.querySelectorAll("[data-source-row]") || []);
+  const mode = getActiveSourceMode();
+  const payloadRows = [];
+
+  rows.forEach((rowEl, rowIndex) => {
+    const title = String(rowEl.querySelector("[data-source-title]")?.value || "").trim();
+    const urlRaw = String(rowEl.querySelector("[data-source-url]")?.value || "").trim();
+    const sourceType = String(rowEl.querySelector("[data-source-type]")?.value || "").trim();
+    const sourceRole = String(rowEl.querySelector("[data-source-role]")?.value || "").trim() || "참고출처";
+    const publisher = String(rowEl.querySelector("[data-source-publisher]")?.value || "").trim();
+    const publishedAt = String(rowEl.querySelector("[data-source-published-at]")?.value || "").trim();
+    const summary = String(rowEl.querySelector("[data-source-summary]")?.value || "").trim();
+    const note = String(rowEl.querySelector("[data-source-note]")?.value || "").trim();
+    const targetPath = String(rowEl.querySelector("[data-source-target-path]")?.value || "").trim();
+
+    const hasAny = [title, urlRaw, sourceType, publisher, publishedAt, summary, note, targetPath].some(Boolean);
+    if (!hasAny) return;
+
+    if (!title) {
+      throw new Error(`출처 ${rowIndex + 1}: 출처 제목을 입력해 주세요.`);
+    }
+
+    const normalizedUrl = utils.normalizeHttpUrl(urlRaw);
+    if (urlRaw && !normalizedUrl) {
+      throw new Error(`출처 ${rowIndex + 1}: URL 형식은 http(s)만 허용됩니다.`);
+    }
+
+    if (mode === "advanced" && !targetPath) {
+      throw new Error(`출처 ${rowIndex + 1}: 연결 항목을 선택해 주세요.`);
+    }
+
+    payloadRows.push({
+      title,
+      url: normalizedUrl || "",
+      source_type: sourceType || "",
+      source_role: sourceRole,
+      publisher: publisher || "",
+      published_at: publishedAt || "",
+      summary: summary || "",
+      note: note || "",
+      link_scope: mode === "advanced" ? "goal" : "pledge",
+      target_path: mode === "advanced" ? targetPath : "",
     });
-    const missing = goals.filter((goal) => !assigned.has(goal.value));
-    if (missing.length) {
-      const missingNames = missing.map((goal) => goal.label).join(", ");
-      throw new Error(`goal 연결을 선택한 경우 모든 대항목에 출처가 필요합니다: ${missingNames}`);
-    }
-  }
-  return collected;
-}
-
-function findBlogGoal(goalId) {
-  return blogDraftGoals.find((goal) => String(goal.id) === String(goalId)) || null;
-}
-
-function findBlogPromise(promiseId) {
-  for (const goal of blogDraftGoals) {
-    const promise = (goal.promises || []).find((row) => String(row.id) === String(promiseId));
-    if (promise) return { goal, promise };
-  }
-  return null;
-}
-
-function addBlogNode() {
-  const nodeType = cleanText(blogNodeTypeSelect?.value || "").toLowerCase();
-  const nodeText = cleanText(blogNodeTextInput?.value || "");
-  if (!nodeType) throw new Error(TEXT.blogNeedNodeType);
-
-  if (nodeType === "goal") {
-    const sectionType = cleanText(blogGoalTypeSelect?.value || "");
-    if (!sectionType) throw new Error(TEXT.blogNeedGoalType);
-    const title = normalizeBlogGoalTitle(sectionType);
-    if (!title) throw new Error(TEXT.blogNeedGoalType);
-    blogDraftGoals.push({ id: nextBlogId("goal"), title, promises: [] });
-  } else if (nodeType === "promise") {
-    const goalId = cleanText(blogParentGoalSelect?.value || "");
-    if (!goalId || !nodeText) throw new Error(TEXT.blogNeedPromise);
-    const goal = findBlogGoal(goalId);
-    if (!goal) throw new Error(TEXT.blogNeedGoal);
-    goal.promises.push({ id: nextBlogId("promise"), title: nodeText, items: [] });
-  } else if (nodeType === "item") {
-    const promiseId = cleanText(blogParentPromiseSelect?.value || "");
-    if (!promiseId || !nodeText) throw new Error(TEXT.blogNeedItem);
-    const found = findBlogPromise(promiseId);
-    if (!found) throw new Error(TEXT.blogNeedPromise);
-    found.promise.items.push({ id: nextBlogId("item"), detail: nodeText });
-  } else {
-    throw new Error(TEXT.blogNeedNodeType);
-  }
-
-  if (blogNodeTextInput) blogNodeTextInput.value = "";
-  syncBlogRawTextFromDraft();
-  populateBlogSelects();
-  syncBlogComposerState();
-  renderBlogStructureTree();
-}
-
-function deleteBlogNode(action, goalId, promiseId, itemId) {
-  if (action === "delete-goal") {
-    if (!window.confirm(TEXT.confirmDeleteGoalNode)) return;
-    blogDraftGoals = blogDraftGoals.filter((goal) => String(goal.id) !== String(goalId));
-  } else if (action === "delete-promise") {
-    if (!window.confirm(TEXT.confirmDeletePromiseNode)) return;
-    const goal = findBlogGoal(goalId);
-    if (goal) goal.promises = (goal.promises || []).filter((promise) => String(promise.id) !== String(promiseId));
-  } else if (action === "delete-item") {
-    if (!window.confirm(TEXT.confirmDeleteItemNode)) return;
-    const found = findBlogPromise(promiseId);
-    if (found) found.promise.items = (found.promise.items || []).filter((item) => String(item.id) !== String(itemId));
-  }
-  syncBlogRawTextFromDraft();
-  populateBlogSelects();
-  renderBlogStructureTree();
-}
-
-function getCandidateMap() { return new Map(candidates.map((row) => [String(row.id), row])); }
-function getElectionMap() { return new Map(elections.map((row) => [String(row.id), row])); }
-
-function populateCandidateElectionSelects() {
-  const candidateMap = getCandidateMap();
-  const electionMap = getElectionMap();
-  const options = candidateElections.map((row) => {
-    const candidate = candidateMap.get(String(row.candidate_id));
-    const election = electionMap.get(String(row.election_id));
-    const candidateName = candidate?.name || `${TEXT.candidateId}${row.candidate_id}`;
-    const electionTitle = election?.title || `${TEXT.electionId}${row.election_id}`;
-    const result = row.result || TEXT.noResult;
-    return `<option value="${row.id}">${escapeHtml(candidateName)} · ${escapeHtml(electionTitle)} · ${escapeHtml(result)}</option>`;
-  }).join("");
-
-  if (candidateElectionSelect) {
-    const current = candidateElectionSelect.value;
-    candidateElectionSelect.innerHTML = `<option value="">${TEXT.selectCandidateElection}</option>${options}`;
-    if (current) candidateElectionSelect.value = current;
-  }
-}
-
-function resetParserForm() {
-  pledgeForm?.reset();
-  closeGoalMenu();
-  setBlogDraftFromGoals([]);
-  if (pledgeRawTextGuidedInput) pledgeRawTextGuidedInput.value = "";
-  resetPledgeSourceRows();
-  setGuidedValidation("");
-  focusEditor();
-}
-
-function buildParserPayload() {
-  const candidateElectionId = candidateElectionSelect?.value;
-  const candidateElection = candidateElections.find((row) => String(row.id) === String(candidateElectionId));
-  if (!candidateElectionId || !candidateElection) throw new Error(TEXT.needCandidateElection);
-
-  const title = (pledgeTitleInput?.value || "").trim();
-  const category = (pledgeCategoryInput?.value || "").trim();
-  if (!title || !category) throw new Error(TEXT.needTitleCategory);
-
-  let normalizedText = "";
-  if (activeEditorMode === "paste") {
-    normalizedText = serializeBlogDraft();
-  } else {
-    const editorValue = pledgeRawTextGuidedInput?.value || "";
-    const guidedValidation = validateGuidedEditor(editorValue);
-    if (guidedValidation) throw new Error(guidedValidation);
-    normalizedText = getParsedModel(editorValue).normalizedText;
-  }
-  if (!normalizedText) throw new Error(TEXT.parseFail);
-
-  const sortRaw = (pledgeSortOrderInput?.value || "").trim();
-  let sort_order = null;
-  if (sortRaw) {
-    const n = Number(sortRaw);
-    if (!Number.isFinite(n) || n < 1) throw new Error(TEXT.badSort);
-    sort_order = Math.floor(n);
-  }
-
-  return { candidate_election_id: candidateElection.id, sort_order, title, raw_text: normalizedText, category, status: "active" };
-}
-
-async function refreshAllData() {
-  const [candidateResp, electionResp, candidateElectionResp] = await Promise.all([
-    apiGet("/api/candidate-admin/candidates"),
-    apiGet("/api/candidate-admin/elections"),
-    apiGet("/api/candidate-admin/candidate-elections"),
-  ]);
-  candidates = candidateResp.rows || [];
-  elections = electionResp.rows || [];
-  candidateElections = candidateElectionResp.rows || [];
-  populateCandidateElectionSelects();
-  await refreshReusableSources();
-}
-
-function handleGuidedEditorKeydown(event) {
-  const input = pledgeRawTextGuidedInput;
-  if (!input) return;
-
-  handleEditorShortcut(event);
-  if (event.defaultPrevented) return;
-
-  const value = input.value || "";
-  const start = input.selectionStart ?? 0;
-  const end = input.selectionEnd ?? start;
-  const { lineStart, line } = getLineContext(value, start);
-  const token = getLeadingToken(line);
-  const tokenEnd = lineStart + token.length;
-  const atProtectedToken = token && start === end && start >= lineStart && start < tokenEnd;
-
-  if (event.key === "Backspace" && start === end && token) {
-    if (start > lineStart && start <= tokenEnd) {
-      event.preventDefault();
-      input.value = `${value.slice(0, lineStart)}${value.slice(tokenEnd)}`;
-      input.setSelectionRange(lineStart, lineStart);
-      setGuidedValidation(validateGuidedEditor(input.value));
-      return;
-    }
-  }
-
-  if (event.key === "Delete" && start === end && token) {
-    if (start >= lineStart && start < tokenEnd) {
-      event.preventDefault();
-      input.value = `${value.slice(0, lineStart)}${value.slice(tokenEnd)}`;
-      input.setSelectionRange(lineStart, lineStart);
-      setGuidedValidation(validateGuidedEditor(input.value));
-      return;
-    }
-  }
-
-  if (atProtectedToken && event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
-    event.preventDefault();
-    input.setSelectionRange(tokenEnd, tokenEnd);
-    setGuidedValidation(TEXT.guidedTokenProtected);
-  }
-}
-
-pledgeRawTextGuidedInput?.addEventListener("input", () => {
-  setGuidedValidation(validateGuidedEditor(pledgeRawTextGuidedInput.value || ""));
-  renderPledgeSourceDraftRows();
-});
-
-pledgeRawTextGuidedInput?.addEventListener("keydown", handleGuidedEditorKeydown);
-candidateElectionSelect?.addEventListener("change", async () => {
-  try {
-    await refreshReusableSources();
-  } catch (error) {
-    reusableSourceRows = [];
-    renderPledgeSourceDraftRows();
-    setMessage(error.message || TEXT.requestFail, "error");
-  }
-});
-blogNodeTypeSelect?.addEventListener("change", () => {
-  syncBlogComposerState();
-});
-addBlogNodeBtn?.addEventListener("click", () => {
-  try {
-    addBlogNode();
-  } catch (error) {
-    setMessage(error.message || TEXT.requestFail, "error");
-  }
-});
-blogStructureTreeEl?.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-blog-action]");
-  if (!button) return;
-  const action = button.getAttribute("data-blog-action");
-  const goalId = button.getAttribute("data-goal-id");
-  const promiseId = button.getAttribute("data-promise-id");
-  const itemId = button.getAttribute("data-item-id");
-  deleteBlogNode(action, goalId, promiseId, itemId);
-});
-
-addPledgeSourceBtn?.addEventListener("click", () => {
-  try {
-    addPledgeSourceRow();
-  } catch (error) {
-    setMessage(error.message || TEXT.sourceSaveFail, "error");
-  }
-});
-
-pledgeSourceListEl?.addEventListener("click", (event) => {
-  const removeButton = event.target.closest("button[data-source-action='remove']");
-  if (!removeButton) return;
-  removePledgeSourceRow(removeButton.getAttribute("data-source-row-id"));
-});
-
-pledgeSourceListEl?.addEventListener("input", (event) => {
-  const rowEl = event.target.closest("[data-source-row-id]");
-  const field = event.target.getAttribute("data-source-field");
-  if (!rowEl || !field) return;
-  updatePledgeSourceRowField(rowEl.getAttribute("data-source-row-id"), field, event.target.value);
-});
-
-pledgeSourceListEl?.addEventListener("change", (event) => {
-  const rowEl = event.target.closest("[data-source-row-id]");
-  const field = event.target.getAttribute("data-source-field");
-  if (!rowEl || !field) return;
-  updatePledgeSourceRowField(rowEl.getAttribute("data-source-row-id"), field, event.target.value);
-});
-
-editorModeTabs.forEach((button) => {
-  button.addEventListener("click", () => {
-    const nextMode = button.dataset.editorMode === "guided" ? "guided" : "paste";
-    if (nextMode === activeEditorMode) return;
-    syncEditors(activeEditorMode, nextMode);
-    setEditorMode(nextMode);
-    focusEditor();
   });
-});
 
-pledgeForm?.addEventListener("click", (event) => {
-  const menuToggleButton = event.target.closest("button[data-goal-menu-toggle]");
-  if (menuToggleButton) {
-    event.preventDefault();
-    if (activeEditorMode !== "guided") return;
-    toggleGoalMenu();
-    return;
-  }
-
-  const goalOptionButton = event.target.closest("button[data-goal-option]");
-  if (goalOptionButton) {
-    event.preventDefault();
-    if (activeEditorMode !== "guided") return;
-    const option = goalOptionButton.getAttribute("data-goal-option") || "";
-    const label = resolveGoalOption(option);
-    if (label) {
-      setGuidedValidation(validateGuidedEditor(pledgeRawTextGuidedInput?.value || ""));
-      insertGoalOption(label);
+  if (mode === "advanced" && payloadRows.length) {
+    const goalOptions = preview.getGoalTargetOptions(parsedModel || null);
+    if (!goalOptions.length) {
+      throw new Error("고급 모드를 사용하려면 먼저 구조 분석을 실행해 연결 항목을 생성해 주세요.");
     }
-    closeGoalMenu();
-    return;
+
+    const covered = new Set(payloadRows.map((row) => String(row.target_path || "").trim()));
+    const missing = goalOptions.filter((option) => !covered.has(option.value));
+    if (missing.length) {
+      const labels = missing.map((item) => item.label).join(", ");
+      throw new Error(`고급 모드는 모든 목표(goal)에 출처가 필요합니다: ${labels}`);
+    }
   }
 
-  const insertButton = event.target.closest("button[data-insert-token]");
-  if (!insertButton) return;
-  if (activeEditorMode !== "guided") {
-    setMessage(TEXT.guidedTabOnly, "info");
-    return;
-  }
-  const token = insertButton.getAttribute("data-insert-token") || "";
-  const mode = insertButton.getAttribute("data-insert-mode") || "cursor";
-  insertIntoEditor(token, mode);
-});
+  return payloadRows;
+}
 
-document.addEventListener("click", (event) => {
-  if (!goalOptionMenuEl || goalOptionMenuEl.hidden) return;
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  if (target.closest("#goalOptionMenu")) return;
-  if (target.closest("button[data-goal-menu-toggle]")) return;
-  closeGoalMenu();
-});
+function setActiveEditorTab(tabName) {
+  state.activeEditorTab = tabName === "structured" ? "structured" : "free";
 
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  if (!goalOptionMenuEl || goalOptionMenuEl.hidden) return;
-  closeGoalMenu();
-});
+  dom.editorTabButtons.forEach((buttonEl) => {
+    const isActive = buttonEl.dataset.editorTabTarget === state.activeEditorTab;
+    buttonEl.classList.toggle("active", isActive);
+    buttonEl.setAttribute("aria-selected", String(isActive));
+  });
 
-pledgeForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (savePledgeBtn) savePledgeBtn.disabled = true;
-  try {
-    const payload = buildParserPayload();
-    const sourceRows = collectPledgeSourceRowsForSave();
-    payload.sources = sourceRows;
-    setLoading(true, TEXT.sourceSaving);
+  dom.editorPanels.forEach((panelEl) => {
+    const isActive = panelEl.dataset.editorTabPanel === state.activeEditorTab;
+    panelEl.classList.toggle("is-active", isActive);
+    panelEl.hidden = !isActive;
+  });
 
-    await apiPost("/api/pledges", payload);
+  dom.pledgeGridEl?.classList.toggle("structured-focus", state.activeEditorTab === "structured");
+}
 
-    setMessage(TEXT.sourceSaved, "success");
-    resetParserForm();
-  } catch (error) {
-    setMessage(error.message || TEXT.sourceSaveFail, "error");
-  } finally {
-    if (savePledgeBtn) savePledgeBtn.disabled = false;
-    setLoading(false);
-  }
-});
+function resetEditorState() {
+  state.latestParsedModel = null;
+  preview.clearParsedPreview(dom);
+  refreshGoalTargetOptions(null);
+  updateSourceModeUI();
+}
+
+function bindCandidateSearchEvents() {
+  dom.electionSelect?.addEventListener("change", () => {
+    updateCandidateSearchAvailability();
+    resetEditorState();
+  });
+
+  dom.candidateSearchInput?.addEventListener("focus", () => {
+    if (state.candidateSearchBlurTimer) {
+      window.clearTimeout(state.candidateSearchBlurTimer);
+      state.candidateSearchBlurTimer = null;
+    }
+    if (dom.candidateSearchInput.disabled) return;
+    renderCandidateDropdown(dom.candidateSearchInput.value || "");
+  });
+
+  dom.candidateSearchInput?.addEventListener("blur", () => {
+    state.candidateSearchBlurTimer = window.setTimeout(() => hideCandidateDropdown(), 150);
+  });
+
+  dom.candidateSearchInput?.addEventListener("input", () => {
+    const typed = String(dom.candidateSearchInput.value || "").trim();
+    if (state.selectedCandidateOption && typed !== state.selectedCandidateOption.name) {
+      clearSelectedCandidate({ clearInput: false });
+    }
+    renderCandidateDropdown(typed);
+  });
+
+  dom.candidateSearchInput?.addEventListener("keydown", (event) => {
+    if (dom.candidateSearchDropdown?.hidden) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!state.visibleCandidateOptions.length) return;
+      const nextIndex = state.activeCandidateOptionIndex + 1;
+      setActiveCandidateOption(Math.min(nextIndex, state.visibleCandidateOptions.length - 1));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!state.visibleCandidateOptions.length) return;
+      const prevIndex = state.activeCandidateOptionIndex - 1;
+      setActiveCandidateOption(Math.max(prevIndex, 0));
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (state.activeCandidateOptionIndex < 0 || state.activeCandidateOptionIndex >= state.visibleCandidateOptions.length) return;
+      event.preventDefault();
+      selectCandidateOption(state.visibleCandidateOptions[state.activeCandidateOptionIndex]);
+    }
+  });
+
+  dom.candidateSearchDropdown?.addEventListener("mousedown", (event) => {
+    const optionEl = event.target.closest("[data-candidate-election-id]");
+    if (!optionEl) return;
+
+    const candidateElectionId = String(optionEl.dataset.candidateElectionId || "");
+    const option = state.visibleCandidateOptions.find((item) => item.candidateElectionId === candidateElectionId);
+    if (!option) return;
+
+    event.preventDefault();
+    selectCandidateOption(option);
+  });
+}
+
+function bindEditorTabEvents() {
+  dom.editorTabButtons.forEach((buttonEl) => {
+    buttonEl.addEventListener("click", () => {
+      const target = buttonEl.dataset.editorTabTarget;
+      setActiveEditorTab(target);
+      resetEditorState();
+    });
+  });
+}
+
+function bindStructuredEditorEvents() {
+  dom.addStructuredItemBtn?.addEventListener("click", () => {
+    try {
+      const topic = dom.structuredSectionTypeSelect?.value;
+      const text = dom.structuredItemTextInput?.value;
+      addStructuredItem(topic, text);
+      if (dom.structuredItemTextInput) dom.structuredItemTextInput.value = "";
+      dom.structuredItemTextInput?.focus();
+      utils.setMessage(dom.messageEl, `${STRUCTURED_TOPIC_LABELS[String(topic || "").trim()] || "선택 항목"} 항목이 추가되었습니다.`, "success");
+    } catch (error) {
+      utils.setMessage(dom.messageEl, error.message || "단계별 입력 항목 추가에 실패했습니다.", "error");
+    }
+  });
+
+  dom.structuredItemTextInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    dom.addStructuredItemBtn?.click();
+  });
+
+  dom.structuredTopicGrid?.addEventListener("toggle", (event) => {
+    const opened = event.target;
+    if (!(opened instanceof HTMLDetailsElement)) return;
+    if (!opened.classList.contains("structured-topic")) return;
+    if (!opened.open) return;
+
+    dom.structuredTopicGrid.querySelectorAll("details.structured-topic[open]").forEach((el) => {
+      if (el !== opened) el.open = false;
+    });
+  });
+
+  dom.structuredTopicGrid?.addEventListener("click", (event) => {
+    const removeBtn = event.target.closest("[data-action='remove-structured-item']");
+    if (!removeBtn) return;
+
+    const rowEl = removeBtn.closest("[data-structured-item]");
+    if (!rowEl) return;
+
+    const topic = String(rowEl.dataset.structuredTopic || "").trim();
+    const index = Number(rowEl.dataset.structuredIndex);
+    if (!STRUCTURED_TOPICS.includes(topic)) return;
+    if (!Number.isInteger(index) || index < 0) return;
+
+    const rows = state.structuredItems[topic] || [];
+    if (index >= rows.length) return;
+    rows.splice(index, 1);
+    renderStructuredTopicLists();
+
+    if (state.activeEditorTab === "structured") {
+      state.latestParsedModel = null;
+      updateSourceModeUI();
+    }
+  });
+}
+
+function bindSourceEvents() {
+  dom.addSourceRowBtn?.addEventListener("click", () => addSourceRow());
+
+  dom.sourceRowsContainer?.addEventListener("click", (event) => {
+    const removeBtn = event.target.closest("[data-action='remove-source-row']");
+    if (!removeBtn) return;
+    const rowEl = removeBtn.closest("[data-source-row]");
+    rowEl?.remove();
+    refreshSourceRowsUI();
+    updateSourceModeUI();
+  });
+
+  dom.sourceRowsContainer?.addEventListener("input", () => {
+    refreshSourceRowsUI();
+  });
+
+  dom.sourceQuickList?.addEventListener("click", (event) => {
+    const jumpBtn = event.target.closest("[data-action='jump-source-row']");
+    if (!jumpBtn) return;
+    const index = Number(jumpBtn.dataset.sourceIndex);
+    if (!Number.isInteger(index) || index < 1) return;
+    const targetRow = dom.sourceRowsContainer?.querySelector(`[data-source-index="${index}"]`);
+    if (!targetRow) return;
+
+    targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+    targetRow.classList.add("source-row-focus");
+    window.setTimeout(() => targetRow.classList.remove("source-row-focus"), 700);
+  });
+
+  dom.sourceModeInputs.forEach((inputEl) => {
+    inputEl.addEventListener("change", () => updateSourceModeUI());
+  });
+}
+
+function bindParseSaveEvents() {
+  dom.parsePledgeBtn?.addEventListener("click", () => {
+    try {
+      renderPreviewFromCurrentEditor({ requireText: true });
+      utils.setMessage(dom.messageEl, "구조 분석이 완료되었습니다. 미리보기를 확인해 주세요.", "success");
+    } catch (error) {
+      utils.setMessage(dom.messageEl, error.message || "구조 분석에 실패했습니다.", "error");
+    }
+  });
+
+  dom.pledgeRawTextInput?.addEventListener("input", () => {
+    if (state.activeEditorTab !== "free") return;
+    state.latestParsedModel = null;
+    updateSourceModeUI();
+  });
+
+  dom.pledgeForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    utils.setMessage(dom.messageEl, "공약을 저장하는 중입니다...", "info");
+    if (dom.savePledgeBtn) dom.savePledgeBtn.disabled = true;
+    utils.setLoading(state, dom.loadingEl, dom.loadingTextEl, true, "공약과 출처를 저장하는 중입니다...");
+
+    try {
+      const candidateElectionId = String(dom.candidateElectionIdInput?.value || "").trim();
+      const title = String(dom.pledgeTitleInput?.value || "").trim();
+      const category = String(dom.pledgeCategoryInput?.value || "").trim();
+
+      if (!selectedElectionId()) throw new Error("선거를 선택해 주세요.");
+      if (!candidateElectionId) throw new Error("선거 후보자를 선택해 주세요.");
+      if (!title || !category) throw new Error("공약 제목과 카테고리를 입력해 주세요.");
+
+      const sortOrder = utils.normalizeSortOrder(dom.pledgeSortOrderInput?.value);
+      const parsedModel = renderPreviewFromCurrentEditor({ requireText: true });
+      const sources = collectSourcesPayload(parsedModel);
+
+      const payload = {
+        candidate_election_id: candidateElectionId,
+        title,
+        raw_text: parsedModel.raw_text,
+        category,
+        sort_order: sortOrder,
+        status: "active",
+        parse_type: parsedModel.parse_type,
+        structure_version: parsedModel.structure_version,
+        timeline_text: parsedModel.timeline_text || null,
+        finance_text: parsedModel.finance_text || null,
+        sources,
+      };
+
+      await utils.apiPost("/api/pledges", payload);
+
+      utils.setMessage(dom.messageEl, "공약이 저장되었습니다.", "success");
+
+      dom.pledgeForm.reset();
+      setActiveEditorTab("free");
+      updateCandidateSearchAvailability();
+      resetStructuredItems();
+      clearSourcesToDefault();
+
+      state.latestParsedModel = null;
+      preview.clearParsedPreview(dom);
+      refreshGoalTargetOptions(null);
+      updateSourceModeUI();
+    } catch (error) {
+      utils.setMessage(dom.messageEl, error.message || "공약 저장에 실패했습니다.", "error");
+    } finally {
+      if (dom.savePledgeBtn) dom.savePledgeBtn.disabled = false;
+      utils.setLoading(state, dom.loadingEl, dom.loadingTextEl, false);
+    }
+  });
+}
+
+async function refreshInitData() {
+  const [candidatesResp, electionsResp, candidateElectionsResp] = await Promise.all([
+    utils.apiGet("/api/candidate-admin/candidates"),
+    utils.apiGet("/api/candidate-admin/elections"),
+    utils.apiGet("/api/candidate-admin/candidate-elections"),
+  ]);
+
+  state.candidateRows = (candidatesResp.rows || []).slice().sort(utils.sortByName);
+  state.electionRows = electionsResp.rows || [];
+  state.candidateElectionRows = candidateElectionsResp.rows || [];
+
+  state.candidateMap = new Map(
+    state.candidateRows
+      .filter((row) => row?.id !== undefined && row?.id !== null)
+      .map((row) => [String(row.id), row]),
+  );
+
+  state.electionMap = new Map(
+    state.electionRows
+      .filter((row) => row?.id !== undefined && row?.id !== null)
+      .map((row) => [String(row.id), row]),
+  );
+
+  populateElectionSelect();
+  updateCandidateSearchAvailability();
+}
+
+function bindAllEvents() {
+  bindEditorTabEvents();
+  bindCandidateSearchEvents();
+  bindStructuredEditorEvents();
+  bindSourceEvents();
+  bindParseSaveEvents();
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (window.location.pathname !== "/pledge") return;
-  setBlogDraftFromGoals([]);
-  setEditorMode("paste");
-  setLoading(true, TEXT.preparing);
+
+  setActiveEditorTab("free");
+  resetStructuredItems();
+  refreshSourceRowsUI();
+  preview.clearParsedPreview(dom);
+  updateSourceModeUI();
+
+  bindAllEvents();
+
+  utils.setMessage(dom.messageEl, "공약 등록 페이지를 준비하는 중입니다...", "info");
+  utils.setLoading(state, dom.loadingEl, dom.loadingTextEl, true, "기본 데이터를 불러오는 중입니다...");
+
   try {
-    await refreshAllData();
-    setMessage(TEXT.ready, "success");
+    await refreshInitData();
+    utils.setMessage(dom.messageEl, "공약 등록 페이지가 준비되었습니다.", "success");
   } catch (error) {
-    setMessage(error.message || TEXT.initFail, "error");
+    utils.setMessage(dom.messageEl, error.message || "초기 로딩에 실패했습니다.", "error");
   } finally {
-    setLoading(false);
+    utils.setLoading(state, dom.loadingEl, dom.loadingTextEl, false);
   }
 });
-

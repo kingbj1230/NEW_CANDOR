@@ -61,6 +61,14 @@
   letter-spacing: -0.02em;
 }
 
+.progress-overview-subnote {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .progress-overview-message {
   display: none;
   margin-bottom: 12px;
@@ -93,6 +101,65 @@
   background: #ffeded;
   border-color: #f3c3c3;
   color: #a83535;
+}
+
+.progress-public-locked-card {
+  border: 1px solid #d9e6fb;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  box-shadow: 0 12px 24px rgba(15, 40, 78, 0.08);
+  padding: 26px 22px;
+  text-align: center;
+}
+
+.progress-public-locked-card h2 {
+  margin: 0 0 8px;
+  color: #1a365f;
+  font-size: 1.14rem;
+  font-weight: 800;
+}
+
+.progress-public-locked-card p {
+  margin: 0;
+  color: #425f89;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.progress-public-cta {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #cad8f1;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.progress-public-cta p {
+  margin: 0;
+  color: #35547f;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.progress-public-cta-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #abc2e8;
+  background: linear-gradient(150deg, #edf4ff, #dfeeff);
+  color: #1f4f90;
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.progress-public-cta-link:hover {
+  background: #ffffff;
+  color: #123f84;
 }
 
 .overview-controls-card,

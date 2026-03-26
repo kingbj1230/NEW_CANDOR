@@ -3,7 +3,7 @@
 {% block title %}홈{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css', v='20260313a') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/index.css', v='20260323b') }}">
 {% endblock %}
 
 {% block header %}
@@ -16,6 +16,7 @@
             후보, 선거, 공약 구조, 이행 평가, 출처를 하나의 흐름으로 연결해
             시민이 빠르게 이해할 수 있는 탐색 화면을 제공합니다.
         </p>
+        <p class="home-beta-note">현재 베타 서비스에서는 대통령 후보자 정보를 우선 제공합니다.<br>국회의원 및 기타 직책 정보는 추후 순차적으로 추가될 예정입니다.</p>
         <div class="home-hero-actions">
             <a href="/promises" class="btn btn-primary btn-lg">공약 살펴보기</a>
             <a href="/politicians" class="btn btn-outline-primary btn-lg">정치인 찾기</a>

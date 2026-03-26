@@ -3,7 +3,7 @@
 {% block title %}후보자 등록{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css', v='20260313r2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/candidate.css', v='20260323r6') }}">
 {% endblock %}
 
 {% block main %}
@@ -11,7 +11,6 @@
   <header class="candidate-hero">
     <span class="hero-kicker">관리자 도구</span>
     <h1>후보자 등록</h1>
-    <p>후보자 등록과 당선 경력 입력을 분리해 관리할 수 있습니다.</p>
     <a class="hero-link" href="/election">선거 등록으로 이동</a>
   </header>
 
@@ -58,14 +57,11 @@
       <form id="termForm" class="candidate-form">
         <h2>당선 경력 등록</h2>
 
-        <p class="form-help">당선된 후보/선거 조합만 선택할 수 있습니다.</p>
-        <p class="form-help">선택 시 직책/임기 기간이 자동으로 채워집니다. 필요한 경우 직접 수정한 뒤 저장하세요.</p>
-
         <label for="termWinnerPair">당선 이력</label>
         <select id="termWinnerPair" name="winner_pair" required></select>
 
         <label for="termPosition">직책</label>
-        <input id="termPosition" name="position" type="text" required placeholder="예: 대통령, 국회의원">
+        <input id="termPosition" name="position" type="text" required placeholder="예: 대통령">
 
         <label for="termStart">임기 시작일</label>
         <input id="termStart" name="term_start" type="date" required>
@@ -87,5 +83,5 @@
   </section>
 </section>
 
-<script src="{{ url_for('static', filename='js/candidate-admin.js', v='20260317r1') }}"></script>
+<script src="{{ url_for('static', filename='js/candidate-admin.js', v='20260326r1') }}"></script>
 {% endblock %}

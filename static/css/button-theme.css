@@ -1,0 +1,94 @@
+/* Revert option:
+   Remove `ui-buttons-skin` from <body> in templates/layout.html to disable all styles in this file.
+*/
+
+body.ui-buttons-skin {
+  --btn-accent-a: #1d4ed8;
+  --btn-accent-b: #2563eb;
+  --btn-accent-soft: #eef4ff;
+  --btn-line: #c9d7ef;
+  --btn-text: #223551;
+  --btn-shadow: 0 10px 22px rgba(24, 56, 104, 0.14);
+}
+
+body.ui-buttons-skin .app-nav-primary .nav-link {
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+body.ui-buttons-skin .app-nav-primary .nav-link:hover {
+  transform: translateY(-1px);
+  border-color: #dbe5f8;
+  box-shadow: 0 8px 18px rgba(30, 58, 138, 0.12);
+}
+
+body.ui-buttons-skin .app-nav-primary .nav-link.active {
+  border-color: #bed1f3;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
+}
+
+body.ui-buttons-skin .app-nav-btn,
+body.ui-buttons-skin .candidate-form button,
+body.ui-buttons-skin .candidate-list-header button,
+body.ui-buttons-skin .relation-actions button,
+body.ui-buttons-skin .feedback-btn {
+  border-radius: 12px;
+  border: 1px solid var(--btn-line);
+  box-shadow: 0 4px 12px rgba(36, 62, 103, 0.1);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, filter 0.16s ease;
+}
+
+body.ui-buttons-skin .app-nav-btn:hover,
+body.ui-buttons-skin .candidate-form button:hover,
+body.ui-buttons-skin .candidate-list-header button:hover,
+body.ui-buttons-skin .relation-actions button:hover,
+body.ui-buttons-skin .feedback-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--btn-shadow);
+  border-color: #a8bfeb;
+}
+
+body.ui-buttons-skin .app-nav-btn.app-nav-btn-primary,
+body.ui-buttons-skin .candidate-form button:not(.secondary),
+body.ui-buttons-skin .feedback-btn.primary {
+  background: linear-gradient(140deg, var(--btn-accent-a), var(--btn-accent-b));
+  border-color: #2c67dc;
+  color: #fff;
+}
+
+body.ui-buttons-skin .app-nav-btn.app-nav-btn-primary:hover,
+body.ui-buttons-skin .candidate-form button:not(.secondary):hover,
+body.ui-buttons-skin .feedback-btn.primary:hover {
+  filter: brightness(1.02);
+}
+
+body.ui-buttons-skin .app-nav-btn.app-nav-btn-soft,
+body.ui-buttons-skin .app-nav-btn.app-nav-btn-ghost,
+body.ui-buttons-skin .candidate-form button.secondary,
+body.ui-buttons-skin .candidate-list-header button,
+body.ui-buttons-skin .relation-actions button,
+body.ui-buttons-skin .feedback-btn.ghost {
+  background: linear-gradient(180deg, #ffffff 0%, var(--btn-accent-soft) 100%);
+  color: var(--btn-text);
+}
+
+body.ui-buttons-skin .app-nav-btn.active {
+  background: linear-gradient(140deg, var(--btn-accent-a), var(--btn-accent-b));
+  border-color: #2c67dc;
+  color: #fff;
+  box-shadow: var(--btn-shadow);
+}
+
+body.ui-buttons-skin .relation-actions button.danger {
+  border-color: #f1b8c5;
+  background: linear-gradient(180deg, #fff5f7 0%, #ffeef2 100%);
+  color: #9b2440;
+}
+
+@media (max-width: 991.98px) {
+  body.ui-buttons-skin .app-nav-actions .app-nav-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
