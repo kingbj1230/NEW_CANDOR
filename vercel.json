@@ -6,10 +6,5 @@
       "source": "/(.*)",
       "destination": "/api/index.py"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "excludeFiles": "{tests/**,__pycache__/**,.git/**,.github/**}"
-    }
-  }
+  ]
 }
