@@ -8,7 +8,7 @@
     }
   ],
   "functions": {
-    "api/**/*.py": {
+    "api/index.py": {
       "excludeFiles": "{tests/**,__pycache__/**,.git/**,.github/**}"
     }
   }
