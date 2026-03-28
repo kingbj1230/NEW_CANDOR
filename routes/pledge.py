@@ -1,5 +1,6 @@
 from routes_bootstrap import bind_core, build_pledge_patch_payload, runtime_error_response
 from routes.admin_common import FOREIGN_KEY_DELETE_ERROR, NETWORK_DELETE_ERROR, _unlink_reports_from_pledge
+from services import pledge_source_service as _pledge_source_service
 
 bind_core(globals())
 
@@ -55,7 +56,11 @@ def _build_pledge_goal_target_map(node_rows):
     root_rows = [
         row
         for row in rows
-        if row.get("parent_id") is None and str(row.get("name") or "").strip().lower() == "goal"
+        if row.get("parent_id") is None
+        and (
+            str(row.get("node_type") or "").strip().lower() == "goal"
+            or str(row.get("name") or "").strip().lower() == "goal"
+        )
     ]
     goal_rows = _sorted_node_rows(root_rows)
     for goal_idx, goal_row in enumerate(goal_rows, start=1):
@@ -277,180 +282,69 @@ def _upsert_pledge_source_link(
     )
 
 def _normalize_pledge_sources_payload(raw_sources):
-    if raw_sources is None:
-        return []
-    if not isinstance(raw_sources, list):
-        raise ValueError("sources must be an array")
-    if not raw_sources:
-        raise ValueError("sources must contain at least one row")
-
-    normalized = []
-    for raw in raw_sources:
-        if not isinstance(raw, dict):
-            raise ValueError("source row must be an object")
-
-        source_id = str(raw.get("source_id") or "").strip() or None
-        title = str(raw.get("title") or "").strip()
-        if not title and not source_id:
-            raise ValueError("source title is required")
-
-        inferred_scope = "goal"
-        try:
-            link_scope = _normalize_source_link_scope(raw.get("link_scope") or inferred_scope)
-        except ValueError as exc:
-            raise ValueError(str(exc))
-
-        source_url = str(raw.get("url") or "").strip() or None
-        if source_url:
-            try:
-                parsed_source_url = parse.urlparse(source_url)
-            except Exception:
-                raise ValueError("source url is invalid")
-            if str(parsed_source_url.scheme or "").lower() not in {"http", "https"}:
-                raise ValueError("source url must be http(s)")
-
-        published_at = str(raw.get("published_at") or "").strip() or None
-        if published_at:
-            try:
-                datetime.strptime(published_at, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError("source published_at must be in YYYY-MM-DD format")
-
-        normalized_target_path = _normalize_source_target_path(raw.get("target_path")) if link_scope == "goal" else None
-        if link_scope == "goal" and normalized_target_path and "/" in normalized_target_path:
-            raise ValueError("goal target_path must use g:<순번> 형식입니다.")
-
-        normalized.append(
-            {
-                "source_id": source_id,
-                "link_scope": link_scope,
-                "pledge_node_id": str(raw.get("pledge_node_id") or "").strip() or None if link_scope == "goal" else None,
-                "target_path": normalized_target_path,
-                "source_role": _normalize_node_source_role(raw.get("source_role") or "reference"),
-                "title": title or None,
-                "url": source_url,
-                "source_type": _normalize_source_type(raw.get("source_type")),
-                "publisher": str(raw.get("publisher") or "").strip() or None,
-                "published_at": published_at,
-                "summary": str(raw.get("summary") or "").strip() or None,
-                "note": str(raw.get("note") or "").strip() or None,
-            }
-        )
-
-    return normalized
+    return _pledge_source_service.normalize_pledge_sources_payload(
+        raw_sources,
+        normalize_source_link_scope_fn=_normalize_source_link_scope,
+        normalize_source_target_path_fn=_normalize_source_target_path,
+        normalize_node_source_role_fn=_normalize_node_source_role,
+        normalize_source_type_fn=_normalize_source_type,
+    )
 
 def _save_pledge_source_rows(pledge_id, source_rows, created_nodes, uid):
-    if not source_rows:
-        return [], []
+    return _pledge_source_service.save_pledge_source_rows(
+        pledge_id,
+        source_rows,
+        created_nodes,
+        uid,
+        now_iso_fn=_now_iso,
+        build_pledge_goal_target_map_fn=_build_pledge_goal_target_map,
+        validate_goal_source_coverage_fn=_validate_goal_source_coverage,
+        ensure_source_exists_fn=_ensure_source_exists,
+        find_existing_source_by_url_fn=_find_existing_source_by_url,
+        supabase_insert_with_optional_fields_fn=_supabase_insert_with_optional_fields,
+        upsert_pledge_source_link_fn=_upsert_pledge_source_link,
+        upsert_pledge_node_source_link_fn=_upsert_pledge_node_source_link,
+        first_goal_node_id_fn=_first_goal_node_id,
+        is_foreign_key_runtime_error_fn=_is_foreign_key_runtime_error,
+        is_not_null_constraint_error_fn=_is_not_null_constraint_error,
+    )
 
-    now_iso = _now_iso()
-    goal_map = _build_pledge_goal_target_map(created_nodes)
-    _validate_goal_source_coverage(source_rows, goal_map)
+def _build_candidate_election_source_library(candidate_election_id):
+    return _pledge_source_service.build_candidate_election_source_library(
+        candidate_election_id,
+        supabase_get_with_select_fallback_fn=_supabase_get_with_select_fallback,
+        node_source_table=NODE_SOURCE_TABLE,
+        to_in_filter_fn=_to_in_filter,
+    )
 
-    saved_source_rows = []
-    saved_link_rows = []
+@app.route("/api/pledges/source-library", methods=["GET"])
+@api_login_required
+def api_pledge_source_library():
+    candidate_election_id = str(request.args.get("candidate_election_id") or "").strip()
+    if not candidate_election_id:
+        return jsonify({"error": "candidate_election_id is required"}), 400
 
-    for source_row in source_rows:
-        link_scope = source_row.get("link_scope") or "pledge"
-        source_id = source_row.get("source_id")
-        source_db_row = None
-        if source_id:
-            if not _ensure_source_exists(source_id):
-                raise ValueError("source_id not found")
-        else:
-            source_db_row = _find_existing_source_by_url(source_row.get("url"))
-            source_id = (source_db_row or {}).get("id")
+    try:
+        rows = _build_candidate_election_source_library(candidate_election_id)
+    except RuntimeError as exc:
+        if _is_missing_schema_runtime_error(exc):
+            return jsonify({"candidate_election_id": candidate_election_id, "rows": [], "total": 0})
+        app.logger.exception("Failed to load pledge source library (candidate_election_id=%s): %s", candidate_election_id, exc)
+        return runtime_error_response(
+            exc,
+            default_message="출처 목록 조회에 실패했습니다.",
+            network_message="데이터베이스 연결 문제로 출처 목록 조회에 실패했습니다.",
+            schema_message="출처 관련 테이블 스키마를 확인해 주세요.",
+            debug_prefix="source library fetch failed",
+        )
 
-        if not source_id:
-            source_db_row = _supabase_insert_with_optional_fields(
-                "sources",
-                payload={
-                    "title": source_row.get("title"),
-                    "url": source_row.get("url"),
-                    "source_type": source_row.get("source_type"),
-                    "publisher": source_row.get("publisher"),
-                    "published_at": source_row.get("published_at"),
-                    "summary": source_row.get("summary"),
-                    "note": source_row.get("note"),
-                    "created_at": now_iso,
-                    "created_by": uid,
-                    "updated_at": now_iso,
-                    "updated_by": uid,
-                },
-                optional_fields={
-                    "url",
-                    "source_type",
-                    "publisher",
-                    "published_at",
-                    "summary",
-                    "note",
-                    "created_at",
-                    "created_by",
-                    "updated_at",
-                    "updated_by",
-                },
-            )
-            source_id = source_db_row.get("id")
-
-        if not source_id:
-            raise RuntimeError("source insert failed")
-
-        if link_scope == "pledge":
-            try:
-                link_row = _upsert_pledge_source_link(
-                    pledge_id=pledge_id,
-                    source_id=source_id,
-                    source_role=source_row.get("source_role"),
-                    note=source_row.get("note"),
-                    uid=uid,
-                    now_iso=now_iso,
-                )
-            except RuntimeError as exc:
-                fallback_goal_node_id = _first_goal_node_id(goal_map)
-                can_fallback_to_goal_node = (
-                    fallback_goal_node_id
-                    and (
-                        _is_foreign_key_runtime_error(exc)
-                        or _is_not_null_constraint_error(exc, "pledge_node_id")
-                    )
-                )
-                if not can_fallback_to_goal_node:
-                    raise
-                link_row = _upsert_pledge_node_source_link(
-                    pledge_node_id=fallback_goal_node_id,
-                    pledge_id=pledge_id,
-                    source_id=source_id,
-                    source_role=source_row.get("source_role"),
-                    note=source_row.get("note"),
-                    uid=uid,
-                    now_iso=now_iso,
-                )
-        else:
-            target_node_id = None
-            target_path = str(source_row.get("target_path") or "").strip()
-            if target_path:
-                target_node_id = str((goal_map.get(target_path) or {}).get("node_id") or "").strip() or None
-            if not target_node_id:
-                pledge_node_id = str(source_row.get("pledge_node_id") or "").strip()
-                if pledge_node_id:
-                    target_node_id = pledge_node_id
-            if not target_node_id:
-                raise ValueError("goal 연결에 사용할 대항목을 찾을 수 없습니다.")
-            link_row = _upsert_pledge_node_source_link(
-                pledge_node_id=target_node_id,
-                pledge_id=pledge_id,
-                source_id=source_id,
-                source_role=source_row.get("source_role"),
-                note=source_row.get("note"),
-                uid=uid,
-                now_iso=now_iso,
-            )
-
-        if source_db_row:
-            saved_source_rows.append(source_db_row)
-        saved_link_rows.append(link_row)
-
-    return saved_source_rows, saved_link_rows
+    return jsonify(
+        {
+            "candidate_election_id": candidate_election_id,
+            "rows": rows,
+            "total": len(rows),
+        }
+    )
 
 @app.route("/api/pledges", methods=["POST"])
 def api_pledges():
@@ -490,8 +384,6 @@ def api_pledges():
                 "title": validated["title"],
                 "raw_text": validated["raw_text"],
                 "category": validated["category"],
-                "timeline_text": validated["timeline_text"],
-                "finance_text": validated["finance_text"],
                 "parse_type": validated["parse_type"],
                 "structure_version": validated["structure_version"],
                 "fulfillment_rate": validated["fulfillment_rate"],
@@ -501,7 +393,7 @@ def api_pledges():
                 "updated_at": now,
                 "updated_by": None,
             },
-            optional_fields={"timeline_text", "finance_text", "parse_type", "structure_version", "fulfillment_rate", "updated_by"},
+            optional_fields={"parse_type", "structure_version", "fulfillment_rate", "updated_by"},
         )
     except RuntimeError as exc:
         app.logger.exception("Pledge insert failed: %s", exc)
@@ -598,7 +490,7 @@ def promises_page():
 @app.route("/api/promises", methods=["GET"])
 def api_promises():
     limit, offset = _pagination_params(default_limit=None, max_limit=500)
-    is_admin = _is_admin(_session_user_id())
+    is_admin = _session_is_admin()
     cache_key = f"api_promises:{'admin' if is_admin else 'public'}"
     cached = _cache_get(cache_key)
     candidates = []
@@ -851,11 +743,15 @@ def api_admin_pledge(pledge_id):
 
             return jsonify({"ok": True})
 
+        simple_payload = dict(payload or {})
+        simple_payload.pop("timeline_text", None)
+        simple_payload.pop("finance_text", None)
+
         try:
             _supabase_patch_with_optional_fields(
                 "pledges",
                 query_params={"id": f"eq.{pledge_id}"},
-                payload=payload,
+                payload=simple_payload,
                 optional_fields={"updated_by"},
             )
         except RuntimeError as exc:

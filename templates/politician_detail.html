@@ -3,7 +3,7 @@
 {% block title %}정치인 상세페이지{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/browse.css', v='20260325r10') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/browse.css', v='20260327r11') }}">
 {% endblock %}
 
 {% block main %}
@@ -234,5 +234,5 @@
     window.POLITICIAN_DETAIL_ID = {{ candidate_id | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/politician-detail-tree.js', v='20260325r6') }}"></script>
-<script src="{{ url_for('static', filename='js/politicianDetail.js', v='20260326r1') }}"></script>
+<script src="{{ url_for('static', filename='js/politicianDetail.js', v='20260327r3') }}"></script>
 {% endblock %}

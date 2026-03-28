@@ -30,6 +30,9 @@ from services.pledge_read_service import (
     normalize_compact_text as _service_normalize_compact_text,
     sorted_node_rows as _service_sorted_node_rows,
 )
+from services import auth_session_service as _auth_session_service
+from services import http_security_service as _http_security_service
+from services import supabase_service as _supabase_service
 from utils.app_value_utils import (
     _detect_image_signature,
     _extract_missing_column_from_runtime_message,
@@ -54,25 +57,27 @@ from utils.app_value_utils import (
     _to_in_filter,
     _year_from_date,
 )
+from utils.app_common_utils import (
+    cache_clone as _util_cache_clone,
+    is_status_in_markers as _util_is_status_in_markers,
+    normalize_report_status_for_admin as _util_normalize_report_status_for_admin,
+    normalize_report_type as _util_normalize_report_type,
+    now_iso_utc as _util_now_iso_utc,
+    pagination_params as _util_pagination_params,
+    parse_env_bool as _util_parse_env_bool,
+    parse_env_int as _util_parse_env_int,
+    slice_rows as _util_slice_rows,
+)
 
 
 
 
 def _env_bool(name, default=False):
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return _util_parse_env_bool(os.getenv(name), default)
 
 
 def _env_int(name, default):
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return default
+    return _util_parse_env_int(os.getenv(name), default)
 
 
 FLASK_ENV = os.getenv("FLASK_ENV", "production").strip().lower()
@@ -159,10 +164,51 @@ CSP_REPORT_URI = (os.getenv("CSP_REPORT_URI") or "").strip()
 ALLOW_FRAME_EMBED = _env_bool("ALLOW_FRAME_EMBED", False)
 HSTS_MAX_AGE_SECONDS = max(0, _env_int("HSTS_MAX_AGE_SECONDS", 31536000))
 ALLOW_INSECURE_LOCAL_LOGIN_FALLBACK = _env_bool("ALLOW_INSECURE_LOCAL_LOGIN_FALLBACK", not IS_PRODUCTION)
+ADMIN_ROLE_RECHECK_SECONDS = max(1, _env_int("ADMIN_ROLE_RECHECK_SECONDS", 60))
+ADMIN_ROLE_FALLBACK_SECONDS = ADMIN_ROLE_RECHECK_SECONDS * 2
+ADMIN_CACHE_SESSION_KEYS = ("is_admin", "is_admin_checked_at", "is_admin_uid")
+SENSITIVE_CACHE_PATH_PREFIXES = (
+    "/auth/",
+    "/api/",
+    "/admin/",
+    "/login",
+    "/mypage",
+    "/candidate",
+    "/election",
+    "/pledge",
+)
+STATIC_VERSIONED_CACHE_MAX_AGE_SECONDS = max(
+    60,
+    _env_int(
+        "STATIC_VERSIONED_CACHE_MAX_AGE_SECONDS",
+        31536000 if IS_PRODUCTION else 300,
+    ),
+)
+STATIC_DEFAULT_CACHE_MAX_AGE_SECONDS = max(
+    0,
+    _env_int(
+        "STATIC_DEFAULT_CACHE_MAX_AGE_SECONDS",
+        3600 if IS_PRODUCTION else 60,
+    ),
+)
+PUBLIC_PAGE_CACHE_MAX_AGE_SECONDS = max(
+    0,
+    _env_int(
+        "PUBLIC_PAGE_CACHE_MAX_AGE_SECONDS",
+        120 if IS_PRODUCTION else 0,
+    ),
+)
+PUBLIC_PAGE_CACHE_S_MAXAGE_SECONDS = max(
+    0,
+    _env_int(
+        "PUBLIC_PAGE_CACHE_S_MAXAGE_SECONDS",
+        300 if IS_PRODUCTION else 0,
+    ),
+)
 
 
 def _now_iso():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return _util_now_iso_utc()
 
 
 def _audit_log(action, **fields):
@@ -171,7 +217,7 @@ def _audit_log(action, **fields):
 
 
 def _cache_clone(value):
-    return json.loads(json.dumps(value, ensure_ascii=False))
+    return _util_cache_clone(value)
 
 
 def _cache_get(key):
@@ -221,53 +267,64 @@ def _is_rate_limited(bucket, limit, window_seconds=60):
 
 
 def _normalize_origin(raw_url):
-    text = str(raw_url or "").strip()
-    if not text:
-        return ""
-    parsed = parse.urlparse(text)
-    scheme = str(parsed.scheme or "").lower()
-    netloc = str(parsed.netloc or "").strip().lower()
-    if scheme not in {"http", "https"} or not netloc:
-        return ""
-    return f"{scheme}://{netloc}"
+    return _http_security_service.normalize_origin(raw_url)
 
 
 def _request_origin():
-    origin = _normalize_origin(request.host_url)
-    return origin.rstrip("/")
+    return _http_security_service.request_origin(request.host_url)
 
 
 def _trusted_origins():
-    trusted = {_request_origin()}
-    for origin in CSRF_TRUSTED_ORIGINS:
-        normalized = _normalize_origin(origin)
-        if normalized:
-            trusted.add(normalized)
-    return trusted
+    return _http_security_service.trusted_origins(request.host_url, CSRF_TRUSTED_ORIGINS)
 
 
 def _request_is_https():
-    if request.is_secure:
-        return True
-    x_proto = str(request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
-    return x_proto == "https"
+    return _http_security_service.request_is_https(
+        request_is_secure=request.is_secure,
+        x_forwarded_proto=request.headers.get("X-Forwarded-Proto"),
+    )
 
 
 def _should_check_origin():
-    if not CSRF_ORIGIN_CHECK:
-        return False
-    if str(request.method or "").upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
-        return False
-    if request.path.startswith("/static/"):
-        return False
-    return True
+    return _http_security_service.should_check_origin(
+        csrf_origin_check=CSRF_ORIGIN_CHECK,
+        method=request.method,
+        path=request.path,
+    )
 
 
 def _origin_allowed(value):
-    normalized = _normalize_origin(value)
-    if not normalized:
-        return False
-    return normalized in _trusted_origins()
+    return _http_security_service.origin_allowed(value, _trusted_origins())
+
+
+def _append_vary(response, token):
+    _http_security_service.append_vary(response, token)
+
+
+def _set_no_store_cache_headers(response):
+    _http_security_service.set_no_store_cache_headers(response)
+
+
+def _is_sensitive_cache_path(path):
+    return _http_security_service.is_sensitive_cache_path(path, SENSITIVE_CACHE_PATH_PREFIXES)
+
+
+def _apply_cache_policy(response):
+    return _http_security_service.apply_cache_policy(
+        response,
+        method=request.method,
+        path=request.path,
+        endpoint=request.endpoint,
+        status_code=response.status_code,
+        query_v=request.args.get("v"),
+        has_user_session=bool(session.get("user_id")),
+        response_mimetype=response.mimetype,
+        sensitive_prefixes=SENSITIVE_CACHE_PATH_PREFIXES,
+        static_versioned_max_age_seconds=STATIC_VERSIONED_CACHE_MAX_AGE_SECONDS,
+        static_default_max_age_seconds=STATIC_DEFAULT_CACHE_MAX_AGE_SECONDS,
+        public_page_cache_max_age_seconds=PUBLIC_PAGE_CACHE_MAX_AGE_SECONDS,
+        public_page_cache_s_maxage_seconds=PUBLIC_PAGE_CACHE_S_MAXAGE_SECONDS,
+    )
 
 
 
@@ -275,33 +332,13 @@ def _origin_allowed(value):
 
 
 def _build_csp_header(nonce):
-    script_parts = ["'self'", "https://cdn.jsdelivr.net"]
-    if nonce:
-        script_parts.append(f"'nonce-{nonce}'")
-
-    connect_parts = ["'self'", "https://*.supabase.co", "wss://*.supabase.co"]
-    supabase_origin = _normalize_origin(SUPABASE_URL)
-    if supabase_origin:
-        connect_parts.append(supabase_origin)
-
-    frame_ancestors = "'self'" if ALLOW_FRAME_EMBED else "'none'"
-    directives = [
-        "default-src 'self'",
-        "base-uri 'self'",
-        "object-src 'none'",
-        f"frame-ancestors {frame_ancestors}",
-        "img-src 'self' data: https:",
-        "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
-        f"script-src {' '.join(script_parts)}",
-        f"connect-src {' '.join(connect_parts)}",
-        "form-action 'self'",
-    ]
-    if IS_PRODUCTION:
-        directives.append("upgrade-insecure-requests")
-    if CSP_REPORT_URI:
-        directives.append(f"report-uri {CSP_REPORT_URI}")
-    return "; ".join(directives)
+    return _http_security_service.build_csp_header(
+        nonce,
+        allow_frame_embed=ALLOW_FRAME_EMBED,
+        is_production=IS_PRODUCTION,
+        csp_report_uri=CSP_REPORT_URI,
+        supabase_url=SUPABASE_URL,
+    )
 
 
 def _extract_bearer_token(header_value):
@@ -347,140 +384,81 @@ def _fetch_supabase_user(access_token):
 
 
 def _normalize_report_type(value, default="신고"):
-    raw = str(value or "").strip() or default
-    if raw not in REPORT_TYPE_CHOICES:
-        raise ValueError(f"report_type must be one of: {', '.join(sorted(REPORT_TYPE_CHOICES))}")
-    return raw
+    return _util_normalize_report_type(
+        value,
+        default=default,
+        choices=REPORT_TYPE_CHOICES,
+    )
 
 
 def _normalize_report_status_for_admin(value, default="접수"):
-    raw = str(value or "").strip() or default
-    allowed = {"접수", "검토중", "처리완료", "반려"}
-    if raw not in allowed:
-        raise ValueError(f"status must be one of: {', '.join(sorted(allowed))}")
-    return raw
+    return _util_normalize_report_status_for_admin(
+        value,
+        default=default,
+        allowed={"접수", "검토중", "처리완료", "반려"},
+    )
 
 
 def _is_resolved_report_status(value):
-    normalized = str(value or "").replace(" ", "").lower()
-    return normalized in RESOLVED_REPORT_STATUS_MARKERS
+    return _util_is_status_in_markers(value, RESOLVED_REPORT_STATUS_MARKERS)
 
 
 def _is_rejected_report_status(value):
-    normalized = str(value or "").replace(" ", "").lower()
-    return normalized in REJECTED_REPORT_STATUS_MARKERS
+    return _util_is_status_in_markers(value, REJECTED_REPORT_STATUS_MARKERS)
 
 
 
 
 def _pagination_params(default_limit=None, max_limit=500):
-    limit_raw = str(request.args.get("limit") or "").strip()
-    offset_raw = str(request.args.get("offset") or "").strip()
-
-    offset = 0
-    if offset_raw:
-        try:
-            offset = max(0, int(offset_raw))
-        except (TypeError, ValueError):
-            offset = 0
-
-    if not limit_raw:
-        return default_limit, offset
-
-    try:
-        parsed_limit = int(limit_raw)
-    except (TypeError, ValueError):
-        return default_limit, offset
-    parsed_limit = max(1, parsed_limit)
-    if max_limit > 0:
-        parsed_limit = min(parsed_limit, max_limit)
-    return parsed_limit, offset
+    return _util_pagination_params(
+        request.args.get("limit"),
+        request.args.get("offset"),
+        default_limit=default_limit,
+        max_limit=max_limit,
+    )
 
 
 def _slice_rows(rows, limit, offset):
-    total = len(rows or [])
-    if limit is None:
-        return rows, total
-    sliced = (rows or [])[offset: offset + limit]
-    return sliced, total
+    return _util_slice_rows(rows, limit, offset)
 
 
 def _build_supabase_headers(extra_headers=None):
-    if not SUPABASE_SERVICE_ROLE_KEY:
-        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY) is not configured.")
-
-    headers = {
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json",
-    }
-    if extra_headers:
-        headers.update(extra_headers)
-    return headers
+    return _supabase_service.build_supabase_headers(
+        SUPABASE_SERVICE_ROLE_KEY,
+        extra_headers,
+    )
 
 
 def _supabase_request(method, table, query_params=None, payload=None, extra_headers=None):
-    if str(method or "").upper() in {"POST", "PATCH", "DELETE"}:
-        _invalidate_api_cache()
-    query = f"?{parse.urlencode(query_params)}" if query_params else ""
-    url = f"{SUPABASE_REST_BASE}/{table}{query}"
-    body = None if payload is None else json.dumps(payload).encode("utf-8")
-
-    req = urlrequest.Request(
-        url=url,
-        data=body,
-        headers=_build_supabase_headers(extra_headers),
-        method=method,
+    return _supabase_service.supabase_request(
+        method,
+        table,
+        rest_base=SUPABASE_REST_BASE,
+        service_role_key=SUPABASE_SERVICE_ROLE_KEY,
+        query_params=query_params,
+        payload=payload,
+        extra_headers=extra_headers,
+        invalidate_cache_cb=_invalidate_api_cache,
     )
-    try:
-        with urlrequest.urlopen(req, timeout=10) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw else None
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Supabase request failed ({exc.code}): {detail}") from exc
-    except urlerror.URLError as exc:
-        raise RuntimeError(f"Supabase request failed (network): {exc}") from exc
 
 
 def _supabase_insert_returning(table, payload):
-    rows = _supabase_request(
-        "POST",
+    return _supabase_service.supabase_insert_returning(
         table,
-        payload=payload,
-        extra_headers={"Prefer": "return=representation"},
-    ) or []
-    if isinstance(rows, list) and rows:
-        return rows[0]
-    if isinstance(rows, dict):
-        return rows
-    raise RuntimeError(f"Failed to insert row in {table}")
+        payload,
+        supabase_request_fn=_supabase_request,
+    )
 
 
 def _upload_to_supabase_storage(bucket, object_path, content_bytes, content_type):
-    encoded_path = parse.quote(object_path, safe="/")
-    url = f"{SUPABASE_STORAGE_BASE}/object/{bucket}/{encoded_path}"
-    req = urlrequest.Request(
-        url=url,
-        data=content_bytes,
-        headers=_build_supabase_headers(
-            {
-                "Content-Type": content_type or "application/octet-stream",
-                "x-upsert": "true",
-            }
-        ),
-        method="POST",
+    return _supabase_service.upload_to_supabase_storage(
+        bucket,
+        object_path,
+        content_bytes,
+        content_type,
+        storage_base=SUPABASE_STORAGE_BASE,
+        service_role_key=SUPABASE_SERVICE_ROLE_KEY,
     )
-    try:
-        with urlrequest.urlopen(req, timeout=20):
-            pass
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"Supabase storage upload failed ({exc.code}): {detail}") from exc
-    except urlerror.URLError as exc:
-        raise RuntimeError(f"Supabase storage upload failed (network): {exc}") from exc
-
-    return f"{SUPABASE_STORAGE_BASE}/object/public/{bucket}/{encoded_path}"
 
 
 
@@ -635,31 +613,14 @@ def _is_missing_column_runtime_error(exc):
 
 
 def _supabase_get_with_select_fallback(table, query_params, select_candidates):
-    base_query = dict(query_params or {})
-    last_missing_column_error = None
-    include_order_options = [True]
-    if "order" in base_query:
-        include_order_options.append(False)
-
-    for include_order in include_order_options:
-        for select_text in select_candidates or []:
-            current_query = dict(base_query)
-            if not include_order:
-                current_query.pop("order", None)
-            current_query["select"] = select_text
-            try:
-                return _supabase_request("GET", table, query_params=current_query) or []
-            except RuntimeError as exc:
-                if _is_missing_relation_runtime_error(exc):
-                    return []
-                if _is_missing_column_runtime_error(exc):
-                    last_missing_column_error = exc
-                    continue
-                raise
-
-    if last_missing_column_error:
-        raise last_missing_column_error
-    return []
+    return _supabase_service.supabase_get_with_select_fallback(
+        table,
+        query_params,
+        select_candidates,
+        supabase_request_fn=_supabase_request,
+        is_missing_relation_runtime_error_fn=_is_missing_relation_runtime_error,
+        is_missing_column_runtime_error_fn=_is_missing_column_runtime_error,
+    )
 
 
 def _fetch_terms_rows(candidate_filter=None, candidate_id=None, limit="5000"):
@@ -1239,6 +1200,40 @@ def _session_user_id():
     return session.get("user_id")
 
 
+def _clear_admin_session_cache():
+    _auth_session_service.clear_admin_session_cache(session, ADMIN_CACHE_SESSION_KEYS)
+
+
+def _normalize_session_admin_flag(value):
+    return _auth_session_service.normalize_session_admin_flag(value)
+
+
+def _normalize_session_admin_checked_at(value):
+    return _auth_session_service.normalize_session_admin_checked_at(value)
+
+
+def _normalize_session_admin_uid(value):
+    return _auth_session_service.normalize_session_admin_uid(value)
+
+
+def _admin_cache_debug(event, **fields):
+    if not DEBUG_MODE:
+        return
+    details = " ".join(f"{key}={fields[key]}" for key in sorted(fields))
+    app.logger.info("admin_cache %s %s", event, details)
+
+
+def _set_admin_session_cache(uid, is_admin, *, checked_at=None):
+    _auth_session_service.set_admin_session_cache(
+        session,
+        ADMIN_CACHE_SESSION_KEYS,
+        uid=uid,
+        is_admin=is_admin,
+        checked_at=checked_at,
+        now_ts_fn=lambda: int(datetime.now(timezone.utc).timestamp()),
+    )
+
+
 def _is_admin(user_id):
     if not user_id:
         return False
@@ -1247,18 +1242,63 @@ def _is_admin(user_id):
     return role in {"admin", "super_admin"}
 
 
-def _session_is_admin():
-    uid = _session_user_id()
-    if not uid:
+def _session_is_admin(*, strict=False):
+    uid_text = _normalize_session_admin_uid(_session_user_id())
+    if not uid_text:
+        _admin_cache_debug("cache miss", reason="no_uid", strict=strict)
         return False
-    # role 변경이 즉시 반영되도록 매 요청마다 user_profiles.role을 재확인한다.
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    cached_uid = _normalize_session_admin_uid(session.get("is_admin_uid"))
+    cached_admin = _normalize_session_admin_flag(session.get("is_admin"))
+    checked_at = _normalize_session_admin_checked_at(session.get("is_admin_checked_at"))
+
+    if cached_uid and cached_uid != uid_text:
+        _admin_cache_debug(
+            "cache miss",
+            reason="uid_mismatch",
+            session_uid=cached_uid,
+            uid=uid_text,
+            strict=strict,
+        )
+        _clear_admin_session_cache()
+        cached_uid = None
+        cached_admin = None
+        checked_at = None
+
+    has_cache = cached_uid == uid_text and cached_admin is not None and checked_at is not None
+    cache_age = None
+    if has_cache:
+        cache_age = max(0, now_ts - checked_at)
+        if cache_age <= ADMIN_ROLE_RECHECK_SECONDS:
+            _admin_cache_debug("cache hit", uid=uid_text, age=cache_age, strict=strict)
+            return cached_admin
+        _admin_cache_debug("cache expired", uid=uid_text, age=cache_age, strict=strict)
+    else:
+        _admin_cache_debug("cache miss", uid=uid_text, strict=strict)
+
     try:
-        is_admin = bool(_is_admin(uid))
-        session["is_admin"] = is_admin
-        return is_admin
-    except Exception:
-        cached = session.get("is_admin")
-        return bool(cached) if isinstance(cached, bool) else False
+        fresh_is_admin = bool(_is_admin(uid_text))
+        _set_admin_session_cache(uid_text, fresh_is_admin, checked_at=now_ts)
+        _admin_cache_debug(
+            "refresh success",
+            uid=uid_text,
+            strict=strict,
+            is_admin=fresh_is_admin,
+        )
+        return fresh_is_admin
+    except Exception as exc:
+        _admin_cache_debug(
+            "refresh failed",
+            uid=uid_text,
+            strict=strict,
+            error=str(exc),
+        )
+        if strict:
+            return False
+        if has_cache and cache_age is not None and cache_age <= ADMIN_ROLE_FALLBACK_SECONDS:
+            return cached_admin
+        return False
 
 
 def _static_page_path(page_key, runtime=False):
@@ -1318,7 +1358,7 @@ def api_admin_required(view):
         uid = _session_user_id()
         if not uid:
             return jsonify({"error": "login required"}), 401
-        if not _is_admin(uid):
+        if not _session_is_admin(strict=True):
             return jsonify({"error": "admin required"}), 403
         return view(*args, **kwargs)
 
@@ -1393,9 +1433,7 @@ def enforce_idle_session_timeout():
 
 @app.after_request
 def after_request(response):
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Expires"] = 0
-    response.headers["Pragma"] = "no-cache"
+    _apply_cache_policy(response)
 
     if SECURITY_HEADERS_ENABLED:
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -1422,6 +1460,7 @@ def inject_template_flags():
     return {
         "is_admin_user": _session_is_admin(),
         "csp_nonce": getattr(g, "csp_nonce", ""),
+        "debug_mode": DEBUG_MODE,
     }
 
 

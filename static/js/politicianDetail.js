@@ -3,8 +3,53 @@ let candidateData = null;
 let pledgeData = [];
 let electionSections = [];
 let pledgeById = new Map();
+let pledgeDetailCache = new Map();
+let pledgeDetailInFlight = new Map();
+let pledgeDetailNetworkLoaded = new Set();
 let isLoggedIn = false;
 const detailTreeUtils = window.PoliticianDetailTreeUtils || {};
+const detailPerfLogEnabled = Boolean(window.APP_CONTEXT?.debugMode)
+  || ["localhost", "127.0.0.1", "::1"].includes(String(window.location.hostname || "").toLowerCase())
+  || String(window.location.hostname || "").toLowerCase().endsWith(".local");
+let detailPerfRequestSeq = 0;
+
+function detailPerfStart(method, url) {
+  if (!detailPerfLogEnabled) return null;
+  detailPerfRequestSeq += 1;
+  const marker = `[detail-perf][front][#${detailPerfRequestSeq}]`;
+  const startedAt = performance.now();
+  const startedIso = new Date().toISOString();
+  console.info(`${marker} start method=${method} url=${url} at=${startedIso}`);
+  return {
+    marker,
+    method,
+    url,
+    startedAt,
+    startedIso,
+  };
+}
+
+function detailPerfEnd(ctx, { status = null, bytes = null, ok = null, error = null } = {}) {
+  if (!ctx) return;
+  const elapsedMs = performance.now() - ctx.startedAt;
+  const finishedIso = new Date().toISOString();
+  const statusText = status === null ? "-" : String(status);
+  const byteText = bytes === null ? "-" : String(bytes);
+  const okText = ok === null ? "-" : String(ok);
+  const errorText = error ? ` error=${error}` : "";
+  console.info(
+    `${ctx.marker} end method=${ctx.method} url=${ctx.url} status=${statusText} ok=${okText} bytes=${byteText} duration_ms=${elapsedMs.toFixed(1)} start=${ctx.startedIso} end=${finishedIso}${errorText}`
+  );
+}
+
+function detailPerfLazyLog(stage, fields = {}) {
+  if (!detailPerfLogEnabled) return;
+  const details = Object.entries(fields)
+    .filter((entry) => entry && entry.length === 2)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  console.info(`[detail-perf][front][lazy] stage=${stage}${details ? ` ${details}` : ""}`);
+}
 
 function normalizeCandidateId(value) {
   const text = String(value ?? "").trim();
@@ -28,6 +73,168 @@ function resolveCandidateId() {
   } catch (_err) {
     return normalizeCandidateId(tail);
   }
+}
+
+function normalizePledgeId(value) {
+  const text = String(value ?? "").trim();
+  return text;
+}
+
+function renderPledgeDetailLoadingMarkup() {
+  return `
+    <div class="pledge-detail-loading" role="status" aria-live="polite">
+      <div class="pledge-detail-loading-spinner" aria-hidden="true"></div>
+      <div class="pledge-detail-skeleton">
+        <span class="line long"></span>
+        <span class="line mid"></span>
+        <span class="line short"></span>
+      </div>
+      <p class="pledge-detail-loading-label">상세 데이터를 불러오는 중입니다...</p>
+    </div>
+  `;
+}
+
+function isPledgeDetailLoaded(pledge) {
+  if (!pledge || typeof pledge !== "object") return false;
+  if (pledge.detail_loaded === true) return true;
+  const hasGoals = Array.isArray(pledge.goals) && pledge.goals.length > 0;
+  const hasSources = Array.isArray(pledge.sources) && pledge.sources.length > 0;
+  const hasRawText = Boolean(String(pledge.raw_text || "").trim());
+  return hasGoals || hasSources || hasRawText;
+}
+
+function normalizePledgeRow(row) {
+  const next = { ...(row || {}) };
+  next.id = normalizePledgeId(next.id);
+  next.candidate_election_id = String(next.candidate_election_id || "").trim() || null;
+  if (!Array.isArray(next.goals)) next.goals = [];
+  if (!Array.isArray(next.sources)) next.sources = [];
+  if (typeof next.raw_text !== "string") next.raw_text = "";
+  next.detail_loaded = isPledgeDetailLoaded(next);
+  return next;
+}
+
+function refreshPledgeIndexes() {
+  pledgeById = new Map();
+  for (const pledge of pledgeData) {
+    const pledgeId = normalizePledgeId(pledge?.id);
+    if (!pledgeId) continue;
+    pledgeById.set(pledgeId, pledge);
+  }
+}
+
+function rebuildSectionsFromSummaryPledges() {
+  const grouped = new Map();
+  for (const pledge of pledgeData) {
+    const key = String(pledge?.candidate_election_id || "").trim();
+    if (!key) continue;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(pledge);
+  }
+  for (const section of electionSections) {
+    const sectionKey = String(section?.candidate_election_id || "").trim();
+    const linked = grouped.get(sectionKey) || [];
+    section.pledges = linked.slice().sort((a, b) => {
+      const bySort = toSortOrderValue(a?.sort_order) - toSortOrderValue(b?.sort_order);
+      if (bySort !== 0) return bySort;
+      return String(a?.created_at || "").localeCompare(String(b?.created_at || ""));
+    });
+    section.pledge_count = section.pledges.length;
+  }
+}
+
+function normalizeCandidateElectionId(value) {
+  return String(value || "").trim();
+}
+
+function isElectedResultValue(value) {
+  const normalized = String(value ?? "").replace(/\s+/g, "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (["1", "true", "t", "yes", "y", "win", "winner", "elected"].includes(normalized)) return true;
+  return normalized.includes("당선");
+}
+
+function findElectionSectionByCandidateElectionId(candidateElectionId) {
+  const target = normalizeCandidateElectionId(candidateElectionId);
+  if (!target) return null;
+  for (const section of Array.isArray(electionSections) ? electionSections : []) {
+    if (normalizeCandidateElectionId(section?.candidate_election_id) === target) {
+      return section || null;
+    }
+  }
+  return null;
+}
+
+function canInputProgressForCandidateElection(candidateElectionId) {
+  const section = findElectionSectionByCandidateElectionId(candidateElectionId);
+  if (!section) return true;
+  if (isElectedResultValue(section?.is_elect)) return true;
+  return isElectedResultValue(section?.result);
+}
+
+function canEditProgressFromButton(button, entry = null) {
+  const flag = String(button?.getAttribute("data-can-edit-progress") || "").trim();
+  if (flag === "1") return true;
+  if (flag === "0") return false;
+  const candidateElectionId = normalizeCandidateElectionId(
+    button?.getAttribute("data-candidate-election-id")
+    || entry?.pledge?.candidate_election_id
+  );
+  return canInputProgressForCandidateElection(candidateElectionId);
+}
+
+function upsertPledgeIntoState(pledgeId, detailRow) {
+  const id = normalizePledgeId(pledgeId);
+  if (!id) return null;
+  const normalizedDetail = normalizePledgeRow({
+    ...(detailRow || {}),
+    id,
+    detail_loaded: true,
+  });
+  pledgeDetailCache.set(id, normalizedDetail);
+
+  const nextRows = [];
+  let updated = false;
+  for (const row of pledgeData) {
+    const rowId = normalizePledgeId(row?.id);
+    if (rowId !== id) {
+      nextRows.push(row);
+      continue;
+    }
+    nextRows.push({
+      ...row,
+      ...normalizedDetail,
+      id,
+      detail_loaded: true,
+    });
+    updated = true;
+  }
+  if (!updated) {
+    nextRows.push(normalizedDetail);
+  }
+  pledgeData = nextRows;
+  refreshPledgeIndexes();
+  rebuildSectionsFromSummaryPledges();
+  rebuildProgressNodeIndex();
+  return pledgeById.get(id) || normalizedDetail;
+}
+
+function currentCandidateIdOrThrow() {
+  const id = normalizeCandidateId(candidateData?.id);
+  if (!id) throw new Error("정치인 식별자를 찾지 못했습니다.");
+  return id;
+}
+
+async function ensurePledgeDetailLoaded(pledgeId) {
+  const id = normalizePledgeId(pledgeId);
+  if (!id) throw new Error("공약 식별자를 찾지 못했습니다.");
+
+  const existing = pledgeById.get(id);
+  if (existing) {
+    detailPerfLazyLog("pledge_detail_cache_hit", { pledge_id: id, source: "state_only" });
+    return existing;
+  }
+  throw new Error("공약 데이터를 찾지 못했습니다. 상세 페이지를 새로고침해 주세요.");
 }
 
 const detailLoadingEl = document.getElementById("politicianDetailLoading");
@@ -168,10 +375,30 @@ async function uploadImage(file) {
 }
 
 async function apiGet(url) {
-  const resp = await fetch(url);
-  const payload = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(payload.error || "요청 실패");
-  return payload;
+  const perfCtx = detailPerfStart("GET", url);
+  let logged = false;
+  try {
+    const resp = await fetch(url);
+    const rawText = await resp.text();
+    const payloadBytes = rawText ? new TextEncoder().encode(rawText).length : 0;
+    const payload = rawText ? JSON.parse(rawText) : {};
+    detailPerfEnd(perfCtx, {
+      status: resp.status,
+      bytes: payloadBytes,
+      ok: resp.ok,
+    });
+    logged = true;
+    if (!resp.ok) throw new Error(payload.error || "요청 실패");
+    return payload;
+  } catch (err) {
+    if (!logged) {
+      detailPerfEnd(perfCtx, {
+        ok: false,
+        error: String((err && err.message) || err || "request_failed"),
+      });
+    }
+    throw err;
+  }
 }
 
 function applyLoginState(loggedIn, userId = "", email = "") {
@@ -354,7 +581,17 @@ function renderPledgeStatusOptions(status) {
 
 function adminControlsForPledge(pledge) {
   if (!isAdmin) return "";
+  const detailLoaded = isPledgeDetailLoaded(pledge);
   const safeId = escapeHtml(pledge?.id);
+  if (!detailLoaded) {
+    return `
+      <div class="admin-actions pledge-admin-actions">
+        <button type="button" class="admin-btn" data-action="load-pledge-detail" data-id="${safeId}">상세 불러오기</button>
+        <button type="button" class="admin-btn danger" data-action="delete-pledge" data-id="${safeId}">삭제</button>
+      </div>
+      <p class="inline-form-help">공약 수정을 위해 상세 데이터를 먼저 불러와 주세요.</p>
+    `;
+  }
   const safeTitle = escapeHtml(pledge?.title || "");
   const safeCategory = escapeHtml(pledge?.category || "");
   const safeRawText = escapeHtml(pledge?.raw_text || "");
@@ -598,10 +835,15 @@ function scoreBarMarkup(node) {
 }
 
 function renderScoreBadge(node, meta = {}) {
+  const candidateElectionId = normalizeCandidateElectionId(meta?.candidateElectionId);
+  const canEditProgress = canInputProgressForCandidateElection(candidateElectionId);
+  if (!canEditProgress) return "";
   const bar = scoreBarMarkup(node);
   const scoreLabel = Number.isFinite(bar.numeric) ? `${formatScoreText(bar.numeric)}점` : "대기";
   if (!node?.id) return `<span class="score-readonly">${bar.html}<span class="score-input-label">${escapeHtml(scoreLabel)}</span></span>`;
-  const actionLabel = Number.isFinite(bar.numeric) ? "평가 자세히 보기" : "평가 입력";
+  const actionLabel = canEditProgress
+    ? (Number.isFinite(bar.numeric) ? "평가 자세히 보기" : "평가 입력")
+    : "평가 자세히 보기";
   const nodePath = String(meta?.nodePath || node?.text || "").trim();
   const pledgeId = String(meta?.pledgeId || "").trim();
   const pledgeTitle = String(meta?.pledgeTitle || "").trim();
@@ -636,6 +878,8 @@ function renderScoreBadge(node, meta = {}) {
       data-current-page-no="${escapeHtml(latestSourceLink?.page_no || "")}"
       data-current-quoted-text="${escapeHtml(latestSourceLink?.quoted_text || "")}"
       data-current-link-note="${escapeHtml(latestSourceLink?.note || "")}"
+      data-candidate-election-id="${escapeHtml(candidateElectionId)}"
+      data-can-edit-progress="${canEditProgress ? "1" : "0"}"
       title="${escapeHtml(actionLabel)}"
     >
       ${bar.html}
@@ -646,12 +890,16 @@ function renderScoreBadge(node, meta = {}) {
 }
 
 function renderPledgeTree(pledge) {
+  if (!isPledgeDetailLoaded(pledge)) {
+    return '<p class="promise-summary">상세 내용은 공약 카드를 펼칠 때 불러옵니다.</p>';
+  }
   if (typeof detailTreeUtils.renderPledgeTreeMarkup === "function") {
     return detailTreeUtils.renderPledgeTreeMarkup(pledge, {
       renderScoreBadgeFn: (node, meta = {}) => renderScoreBadge(node, {
         ...meta,
         pledgeId: pledge?.id,
         pledgeTitle: pledge?.title,
+        candidateElectionId: pledge?.candidate_election_id,
       }),
       escapeHtmlFn: escapeHtml,
       showScoreBadge: true,
@@ -784,6 +1032,7 @@ function renderProgressDetailSources(node) {
 function fillProgressDetailModal(button, entry) {
   if (!entry || !entry.node) return false;
   const node = entry.node;
+  const canEditProgress = canEditProgressFromButton(button, entry);
   const latest = Array.isArray(node?.progress_history) && node.progress_history.length ? (node.progress_history[0] || {}) : null;
   const progressId = String(latest?.id || button?.getAttribute("data-progress-id") || "").trim();
   const bar = scoreBarMarkup(node);
@@ -823,6 +1072,8 @@ function fillProgressDetailModal(button, entry) {
 
   if (progressDetailOpenEditorBtn) {
     progressDetailOpenEditorBtn.textContent = Number.isFinite(bar.numeric) ? "평가 수정" : "평가 입력";
+    progressDetailOpenEditorBtn.hidden = !canEditProgress;
+    progressDetailOpenEditorBtn.disabled = !canEditProgress;
   }
   if (progressDetailReportBtn) {
     const pledgeId = String(button?.getAttribute("data-pledge-id") || entry?.pledge?.id || "").trim();
@@ -980,6 +1231,14 @@ function collectPledgeSources(pledge) {
 }
 
 function renderPledgeSources(pledge) {
+  if (!isPledgeDetailLoaded(pledge)) {
+    return `
+      <details class="pledge-sources-block">
+        <summary>출처 보기</summary>
+        <p class="pledge-sources-empty">상세 정보를 불러오면 출처를 확인할 수 있습니다.</p>
+      </details>
+    `;
+  }
   const rows = collectPledgeSources(pledge);
   if (!rows.length) {
     return `
@@ -1022,13 +1281,18 @@ function bindTreeAccordions() {
 }
 
 function renderPledgeCard(pledge) {
+  const detailLoaded = isPledgeDetailLoaded(pledge);
+  const pledgeId = normalizePledgeId(pledge?.id);
+  const safePledgeId = escapeHtml(pledgeId);
   const createdAt = toDateLabel(pledge?.created_at);
   const sortOrder = toSortOrderValue(pledge?.sort_order, 0);
   const sortLabel = sortOrder > 0 ? `#${sortOrder}` : "#-";
   const nodeCount = countTreeNodes(pledge?.goals || []);
-  const nodeCountLabel = nodeCount > 0 ? `노드 ${nodeCount}개` : "노드 없음";
+  const nodeCountLabel = detailLoaded
+    ? (nodeCount > 0 ? `노드 ${nodeCount}개` : "노드 없음")
+    : "상세 로딩 전";
   return `
-    <details class="pledge-section">
+    <details class="pledge-section" data-pledge-id="${safePledgeId}" data-detail-loaded="${detailLoaded ? "1" : "0"}">
       <summary class="pledge-summary">
         <div class="pledge-summary-main">
           <span class="pledge-summary-title">${escapeHtml(sortLabel)} ${escapeHtml(pledge?.title || "제목 없음")}</span>
@@ -1150,9 +1414,15 @@ async function reloadData() {
   }
   const payload = await apiGet(`/api/politicians/${encodeURIComponent(candidateId)}`);
   candidateData = payload.candidate || null;
-  pledgeData = payload.pledges || [];
-  electionSections = payload.election_sections || [];
-  pledgeById = new Map(pledgeData.map((row) => [String(row.id), row]));
+  pledgeData = (Array.isArray(payload.pledges) ? payload.pledges : []).map((row) => normalizePledgeRow({
+    ...(row || {}),
+    detail_loaded: true,
+  }));
+  electionSections = (Array.isArray(payload.election_sections) ? payload.election_sections : []).map((row) => ({ ...(row || {}) }));
+  pledgeDetailCache = new Map();
+  pledgeDetailInFlight = new Map();
+  pledgeDetailNetworkLoaded = new Set();
+  refreshPledgeIndexes();
 
   if (!electionSections.length && pledgeData.length) {
     electionSections = [
@@ -1166,9 +1436,12 @@ async function reloadData() {
         party: null,
         result: null,
         candidate_number: null,
-        pledges: pledgeData,
+        pledges: pledgeData.slice(),
+        pledge_count: pledgeData.length,
       },
     ];
+  } else {
+    rebuildSectionsFromSummaryPledges();
   }
 
   rebuildProgressNodeIndex();
@@ -1208,6 +1481,10 @@ function closeProgressEditor() {
 async function openProgressEditorFromButton(button) {
   if (!progressEditorModalEl || !progressEditorForm) {
     setMessage("이행률 입력 폼을 초기화하지 못했습니다.", "error");
+    return;
+  }
+  if (!canEditProgressFromButton(button)) {
+    setMessage("낙선한 선거 공약은 이행률 평가 입력 대상이 아닙니다.", "info");
     return;
   }
   if (!isLoggedIn) {
@@ -1606,7 +1883,58 @@ function bindActions() {
     }
   });
 
+  listEl?.addEventListener("toggle", async (event) => {
+    const detailsEl = event.target;
+    if (!(detailsEl instanceof HTMLDetailsElement)) return;
+    if (!detailsEl.classList.contains("pledge-section")) return;
+    if (!detailsEl.open) return;
+
+    const pledgeId = normalizePledgeId(detailsEl.getAttribute("data-pledge-id"));
+    if (!pledgeId) return;
+    const pledge = pledgeById.get(pledgeId);
+    if (isPledgeDetailLoaded(pledge)) {
+      detailPerfLazyLog("pledge_detail_reopen_cache_hit", { pledge_id: pledgeId, source: "state" });
+      return;
+    }
+
+    const bodyEl = detailsEl.querySelector(".pledge-section-body");
+    if (bodyEl) {
+      bodyEl.innerHTML = renderPledgeDetailLoadingMarkup();
+    }
+    detailsEl.classList.add("is-detail-loading");
+    try {
+      await ensurePledgeDetailLoaded(pledgeId);
+      renderDetail();
+      const nextCard = Array.from(listEl.querySelectorAll("details.pledge-section")).find(
+        (node) => normalizePledgeId(node.getAttribute("data-pledge-id")) === pledgeId
+      );
+      if (nextCard) nextCard.open = true;
+    } catch (error) {
+      setMessage(error.message || "공약 상세 데이터를 불러오지 못했습니다.", "error");
+    } finally {
+      detailsEl.classList.remove("is-detail-loading");
+    }
+  });
+
   listEl?.addEventListener("click", async (event) => {
+    const summaryEl = event.target.closest("summary.pledge-summary");
+    if (summaryEl && listEl.contains(summaryEl)) {
+      const detailsEl = summaryEl.closest("details.pledge-section");
+      const pledgeId = normalizePledgeId(detailsEl?.getAttribute("data-pledge-id"));
+      const pledge = pledgeById.get(pledgeId);
+      if (pledgeId && !isPledgeDetailLoaded(pledge)) {
+        detailPerfLazyLog("pledge_detail_click_prefetch", { pledge_id: pledgeId });
+        detailsEl?.classList.add("is-detail-loading");
+        ensurePledgeDetailLoaded(pledgeId)
+          .catch(() => {
+            // Toggle handler will surface user-facing errors; keep click prefetch silent.
+          })
+          .finally(() => {
+            detailsEl?.classList.remove("is-detail-loading");
+          });
+      }
+    }
+
     const btn = event.target.closest("button[data-action]");
     if (!btn) return;
     const action = btn.getAttribute("data-action");
@@ -1624,6 +1952,18 @@ function bindActions() {
       const id = btn.getAttribute("data-id");
       if (!id) return;
 
+      if (action === "load-pledge-detail") {
+        const restoreButton = setActionButtonBusy(btn, "불러오는 중...");
+        try {
+          await ensurePledgeDetailLoaded(id);
+          renderDetail();
+          setMessage("공약 상세 데이터를 불러왔습니다.", "success");
+        } finally {
+          restoreButton();
+        }
+        return;
+      }
+
       if (action === "report-pledge") {
         await reportPledge(id);
         setMessage("신고가 접수되었고 숨김 처리되었습니다.", "success");
@@ -1631,7 +1971,21 @@ function bindActions() {
       }
       if (!isAdmin) return;
       if (action === "toggle-pledge-edit") {
-        const card = btn.closest(".promise-content");
+        const pledgeIdText = normalizePledgeId(id);
+        const existing = pledgeById.get(normalizePledgeId(id));
+        if (!isPledgeDetailLoaded(existing)) {
+          const restoreButton = setActionButtonBusy(btn, "상세 불러오는 중...");
+          try {
+            await ensurePledgeDetailLoaded(pledgeIdText);
+          } finally {
+            restoreButton();
+          }
+          renderDetail();
+        }
+        const pledgeSection = Array.from(listEl.querySelectorAll("details.pledge-section")).find(
+          (node) => normalizePledgeId(node.getAttribute("data-pledge-id")) === pledgeIdText
+        );
+        const card = pledgeSection?.querySelector(".promise-content") || btn.closest(".promise-content");
         if (!card) return;
         const formEl = card.querySelector(`form[data-form='pledge-edit'][data-id="${String(id)}"]`) || card.querySelector("form[data-form='pledge-edit']");
         if (!formEl) return;

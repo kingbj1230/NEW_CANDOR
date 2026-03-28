@@ -3,7 +3,7 @@
 {% block title %}공약 등록{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/pledge.css', v='20260326r2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pledge.css', v='20260328r1') }}">
 {% endblock %}
 
 {% block main %}
@@ -167,18 +167,41 @@
               <button type="button" class="secondary small" data-action="remove-source-row">삭제</button>
             </div>
 
-            <div class="source-row-grid">
+            <div class="source-entry-mode" role="radiogroup" aria-label="출처 선택 방식">
               <label>
+                <input type="radio" data-source-entry-mode value="existing">
+                기존 자료 선택
+              </label>
+              <label>
+                <input type="radio" data-source-entry-mode value="new" checked>
+                새 자료 등록
+              </label>
+            </div>
+
+            <div class="source-existing-wrap" data-source-existing-wrap hidden>
+              <label>
+                기존 자료
+                <select data-source-existing-id>
+                  <option value="">기존 자료를 선택해 주세요</option>
+                </select>
+              </label>
+              <p class="form-help compact source-existing-help" data-source-existing-help>
+                같은 후보/선거에서 사용한 출처를 재사용할 수 있습니다.
+              </p>
+            </div>
+
+            <div class="source-row-grid">
+              <label data-source-new-field>
                 출처 제목
                 <input type="text" data-source-title placeholder="예: 제21대 대통령 선거 공약집">
               </label>
 
-              <label>
+              <label data-source-new-field>
                 URL
                 <input type="url" data-source-url placeholder="https://...">
               </label>
 
-              <label>
+              <label data-source-new-field>
                 출처 유형
                 <select data-source-type>
                   <option value="">선택 안 함</option>
@@ -202,18 +225,18 @@
                 </select>
               </label>
 
-              <label>
+              <label data-source-new-field>
                 발행기관
                 <input type="text" data-source-publisher placeholder="예: 중앙선거관리위원회">
               </label>
 
-              <label>
+              <label data-source-new-field>
                 발행일
                 <input type="date" data-source-published-at>
               </label>
             </div>
 
-            <label>
+            <label data-source-new-field>
               요약
               <textarea class="compact-textarea" data-source-summary placeholder="출처 내용을 간단히 요약해 주세요"></textarea>
             </label>
@@ -293,5 +316,5 @@
 <script src="{{ url_for('static', filename='js/pledge-parse-utils.js', v='20260326r1') }}"></script>
 <script src="{{ url_for('static', filename='js/pledge-admin-utils.js', v='20260325r3') }}"></script>
 <script src="{{ url_for('static', filename='js/pledge-admin-preview.js', v='20260326r1') }}"></script>
-<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260326r1') }}"></script>
+<script src="{{ url_for('static', filename='js/pledge-admin.js', v='20260328r1') }}"></script>
 {% endblock %}

@@ -56,7 +56,10 @@
   }
 
   function normalizeSectionHeader(line) {
-    const compact = collapseSpaces(line).replace(/[\[\]():：\-]/g, "");
+    const compact = collapseSpaces(line)
+      .replace(/^\uFEFF+/, "")
+      .replace(/^[□○◯]+/, "")
+      .replace(/[\[\]():：\-]/g, "");
     return compact;
   }
 

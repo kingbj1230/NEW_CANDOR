@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>공약 트래커 {% block title %}{% endblock %}</title>
+    <title>Candora {% block title %}{% endblock %}</title>
     <meta name="description" content="정치 공약과 이행 현황을 투명하게 확인하는 서비스입니다.">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,7 +18,7 @@
 <body class="ui-buttons-skin">
     <nav class="navbar navbar-expand-lg navbar-light app-nav">
         <div class="container app-nav-shell">
-            <a class="navbar-brand app-brand" href="/">공약 트래커</a>
+            <a class="navbar-brand app-brand" href="/">Candora</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -102,7 +102,7 @@
 
     <footer class="bg-white border-top py-4">
         <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center">
-            <div class="small text-muted">공약 트래커</div>
+            <div class="small text-muted">Candora</div>
             <div>
                 <a class="text-muted me-3" href="{{ url_for('static', filename='pages/about.html') }}">소개</a>
                 <a class="text-muted me-3" href="{{ url_for('static', filename='pages/privacy.html') }}">개인정보처리방침</a>
@@ -153,7 +153,8 @@
     <script nonce="{{ csp_nonce }}">
         window.APP_CONTEXT = {
             userId: {{ session.get("user_id") | tojson }},
-            email: {{ session.get("email") | tojson }}
+            email: {{ session.get("email") | tojson }},
+            debugMode: {{ debug_mode | tojson }}
         };
     </script>
     <script src="{{ url_for('static', filename='js/userAuth.js', v='20260326r2') }}"></script>

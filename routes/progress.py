@@ -181,7 +181,7 @@ def progress_page():
 def api_progress_overview():
     limit, offset = _pagination_params(default_limit=PROGRESS_OVERVIEW_DEFAULT_LIMIT, max_limit=PROGRESS_OVERVIEW_MAX_LIMIT)
     election_type_filter = _normalize_compact_text(request.args.get("election_type"))
-    is_admin = _is_admin(_session_user_id())
+    is_admin = _session_is_admin()
     cache_key = f"api_progress_overview:{'admin' if is_admin else 'public'}:{election_type_filter or '-'}:{limit}:{offset}"
     cached = _cache_get(cache_key)
     if cached:

@@ -5,7 +5,7 @@ bind_core(globals())
 @app.route("/admin/static-pages", methods=["GET", "POST"])
 @login_required
 def static_pages_admin_page():
-    if not _session_is_admin():
+    if not _session_is_admin(strict=True):
         abort(404)
 
     page_key = (request.values.get("page") or "about").strip().lower()
@@ -35,5 +35,4 @@ def static_pages_admin_page():
         save_message=save_message,
         save_error=save_error,
     )
-
 

@@ -16,8 +16,6 @@ def build_pledge_patch_payload(validated, now_iso):
         "title": validated["title"],
         "raw_text": validated["raw_text"],
         "category": validated["category"],
-        "timeline_text": validated["timeline_text"],
-        "finance_text": validated["finance_text"],
         "parse_type": validated["parse_type"],
         "structure_version": validated["structure_version"],
         "fulfillment_rate": validated["fulfillment_rate"],

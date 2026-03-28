@@ -85,21 +85,51 @@ class PledgeSourceUpgradeTests(unittest.TestCase):
             "updated_by",
         )
 
-    def test_legacy_source_endpoints_are_removed(self):
+    def test_legacy_source_endpoints_are_removed_and_source_library_is_available(self):
         self._set_login_session()
 
         self.assertEqual(
             self.client.post("/api/progress-admin/sources", json={"title": "x"}).status_code,
             404,
         )
-        self.assertEqual(
-            self.client.get("/api/pledges/source-library?candidate_election_id=ce-1").status_code,
-            404,
-        )
+        with patch.object(routes_pledge_module, "_build_candidate_election_source_library", return_value=[]):
+            source_library_resp = self.client.get("/api/pledges/source-library?candidate_election_id=ce-1")
+        self.assertEqual(source_library_resp.status_code, 200)
+        self.assertEqual((source_library_resp.get_json() or {}).get("rows"), [])
         self.assertEqual(
             self.client.post("/api/progress-admin/node-sources", json={"source_id": "s-1"}).status_code,
             404,
         )
+
+    def test_source_library_endpoint_aggregates_reusable_sources(self):
+
+        def fake_get_with_select_fallback(table, query_params=None, select_candidates=None):
+            if table == "pledges":
+                return [
+                    {"id": "p-1", "status": "active"},
+                    {"id": "p-2", "status": "deleted"},
+                    {"id": "p-3", "status": "active"},
+                ]
+            if table == app_module.NODE_SOURCE_TABLE:
+                return [
+                    {"source_id": "s-2", "created_at": "2026-03-20T00:00:00Z"},
+                    {"source_id": "s-1", "created_at": "2026-03-19T00:00:00Z"},
+                    {"source_id": "s-1", "created_at": "2026-03-18T00:00:00Z"},
+                ]
+            if table == "sources":
+                return [
+                    {"id": "s-1", "title": "Source 1", "url": "https://example.com/one"},
+                    {"id": "s-2", "title": "Source 2", "url": "https://example.com/two"},
+                ]
+            return []
+
+        with patch.object(routes_pledge_module, "_supabase_get_with_select_fallback", side_effect=fake_get_with_select_fallback):
+            rows = routes_pledge_module._build_candidate_election_source_library("ce-1")
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([row.get("id") for row in rows], ["s-2", "s-1"])
+        self.assertEqual((rows[0] or {}).get("usage_count"), 1)
+        self.assertEqual((rows[1] or {}).get("usage_count"), 2)
 
     def test_api_pledges_saves_source_with_target_path(self):
         self._set_login_session()
@@ -351,6 +381,37 @@ class PledgeSourceUpgradeTests(unittest.TestCase):
         fallback_kwargs = fallback_upsert_mock.call_args.kwargs
         self.assertEqual(fallback_kwargs.get("pledge_node_id"), "goal-1")
         self.assertEqual(fallback_kwargs.get("pledge_id"), "pledge-1")
+
+    def test_build_goal_target_map_supports_localized_goal_names_with_node_type(self):
+        goal_map = routes_pledge_module._build_pledge_goal_target_map(
+            [
+                {
+                    "id": "goal-kor-1",
+                    "pledge_id": "pledge-1",
+                    "name": "목표",
+                    "node_type": "goal",
+                    "content": "목표",
+                    "sort_order": 1,
+                    "parent_id": None,
+                    "is_leaf": False,
+                    "created_at": "2026-03-15T00:00:00Z",
+                },
+                {
+                    "id": "goal-kor-2",
+                    "pledge_id": "pledge-1",
+                    "name": "이행 방법",
+                    "node_type": "goal",
+                    "content": "이행 방법",
+                    "sort_order": 2,
+                    "parent_id": None,
+                    "is_leaf": False,
+                    "created_at": "2026-03-15T00:00:00Z",
+                },
+            ]
+        )
+
+        self.assertEqual((goal_map.get("g:1") or {}).get("node_id"), "goal-kor-1")
+        self.assertEqual((goal_map.get("g:2") or {}).get("node_id"), "goal-kor-2")
 
 
 if __name__ == "__main__":

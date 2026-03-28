@@ -43,6 +43,7 @@ def auth_login():
         session.clear()
         return jsonify({"error": "invalid auth payload"}), 401
 
+    _clear_admin_session_cache()
     session.clear()
     session["user_id"] = user_id
     session["email"] = email
@@ -51,16 +52,18 @@ def auth_login():
 
     try:
         ensure_user_profile(user_id, email)
-        session["is_admin"] = bool(_is_admin(user_id))
+        is_admin = bool(_is_admin(user_id))
+        _set_admin_session_cache(user_id, is_admin)
     except Exception as exc:
         app.logger.exception("Failed to ensure user_profiles row: %s", exc)
-        session["is_admin"] = False
+        _set_admin_session_cache(user_id, False)
 
     return jsonify({"ok": True}), 200
 
 
 @app.route("/auth/logout", methods=["POST"])
 def auth_logout():
+    _clear_admin_session_cache()
     session.clear()
     return jsonify({"ok": True}), 200
 
@@ -78,7 +81,7 @@ def auth_activity():
 def auth_session():
     uid = _session_user_id()
     email = str(session.get("email") or "").strip()
-    is_admin = bool(session.get("is_admin")) if uid else False
+    is_admin = _session_is_admin() if uid else False
     return jsonify(
         {
             "logged_in": bool(uid),
@@ -87,5 +90,4 @@ def auth_session():
             "is_admin": is_admin,
         }
     ), 200
-
 

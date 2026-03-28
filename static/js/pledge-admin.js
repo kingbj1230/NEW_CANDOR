@@ -84,6 +84,10 @@ const state = {
     timeline: [],
     finance: [],
   },
+  sourceLibraryRows: [],
+  sourceLibraryCandidateElectionId: "",
+  sourceLibraryRequestSeq: 0,
+  sourceRowSequence: 0,
 };
 
 const CIRCLED_NUMBERS = [
@@ -128,6 +132,10 @@ function setActiveCandidateOption(index) {
 
 function selectedElectionId() {
   return String(dom.electionSelect?.value || "").trim();
+}
+
+function selectedCandidateElectionId() {
+  return String(dom.candidateElectionIdInput?.value || "").trim();
 }
 
 function getCandidateOptionsForElection(electionId) {
@@ -200,6 +208,7 @@ function clearSelectedCandidate({ clearInput = false } = {}) {
   state.selectedCandidateOption = null;
   if (dom.candidateElectionIdInput) dom.candidateElectionIdInput.value = "";
   if (clearInput && dom.candidateSearchInput) dom.candidateSearchInput.value = "";
+  setSourceLibraryRows([], "");
 }
 
 function selectCandidateOption(option) {
@@ -208,6 +217,7 @@ function selectCandidateOption(option) {
   if (dom.candidateSearchInput) dom.candidateSearchInput.value = option.name;
   hideCandidateDropdown();
   setCandidateSearchHelp(`선택된 후보자: ${option.name}`, "success");
+  void loadSourceLibraryForCandidateElection(option.candidateElectionId);
 }
 
 function updateCandidateSearchAvailability() {
@@ -427,10 +437,128 @@ function updateSourceModeUI() {
   dom.sourceModeHelp.textContent = `고급 모드는 각 항목 세부 연결입니다. 현재 연결 가능 항목: ${labels}`;
 }
 
+function sourceLibraryRows() {
+  return Array.isArray(state.sourceLibraryRows) ? state.sourceLibraryRows : [];
+}
+
+function sourceLibraryOptionLabel(row) {
+  const title = String(row?.title || "").trim() || "제목 없음";
+  const publisher = String(row?.publisher || "").trim();
+  const publishedAt = String(row?.published_at || "").trim();
+  const usageCount = Number(row?.usage_count);
+  const parts = [title];
+  if (publisher) parts.push(publisher);
+  if (publishedAt) parts.push(publishedAt);
+  if (Number.isFinite(usageCount) && usageCount > 0) parts.push(`${usageCount}회 사용`);
+  return parts.join(" · ");
+}
+
+function renderSourceLibraryOptions(selectedSourceId = "") {
+  const rows = sourceLibraryRows();
+  if (!rows.length) {
+    return '<option value="">사용 가능한 기존 자료가 없습니다.</option>';
+  }
+  const selectedId = String(selectedSourceId || "").trim();
+  const options = rows
+    .map((row) => {
+      const sourceId = String(row?.id || "").trim();
+      if (!sourceId) return "";
+      const label = sourceLibraryOptionLabel(row);
+      return `<option value="${utils.escapeHtml(sourceId)}"${sourceId === selectedId ? " selected" : ""}>${utils.escapeHtml(label)}</option>`;
+    })
+    .filter(Boolean)
+    .join("");
+  return `<option value="">기존 자료를 선택해 주세요</option>${options}`;
+}
+
+function populateSourceLibrarySelect(rowEl, selectedSourceId = "") {
+  if (!rowEl) return;
+  const selectEl = rowEl.querySelector("[data-source-existing-id]");
+  if (!selectEl) return;
+
+  const currentValue = String(selectedSourceId || selectEl.value || "").trim();
+  selectEl.innerHTML = renderSourceLibraryOptions(currentValue);
+
+  const canUseCurrent = sourceLibraryRows().some((row) => String(row?.id || "").trim() === currentValue);
+  selectEl.value = canUseCurrent ? currentValue : "";
+
+  const helpEl = rowEl.querySelector("[data-source-existing-help]");
+  if (helpEl) {
+    helpEl.textContent = sourceLibraryRows().length
+      ? "같은 후보/선거에서 이미 사용된 출처를 선택할 수 있습니다."
+      : "재사용 가능한 출처가 없습니다. 새 자료 등록을 사용해 주세요.";
+  }
+}
+
+function getSourceEntryMode(rowEl) {
+  const checked = rowEl?.querySelector("[data-source-entry-mode]:checked");
+  return checked?.value === "existing" ? "existing" : "new";
+}
+
+function applySourceEntryMode(rowEl) {
+  if (!rowEl) return;
+  const mode = getSourceEntryMode(rowEl);
+  rowEl.dataset.sourceEntryMode = mode;
+
+  const existingWrap = rowEl.querySelector("[data-source-existing-wrap]");
+  if (existingWrap) existingWrap.hidden = mode !== "existing";
+
+  const newFieldEls = Array.from(rowEl.querySelectorAll("[data-source-new-field]"));
+  newFieldEls.forEach((fieldEl) => {
+    fieldEl.hidden = mode === "existing";
+  });
+
+  if (mode === "existing") {
+    populateSourceLibrarySelect(rowEl);
+  }
+}
+
+function setSourceLibraryRows(rows, candidateElectionId = "") {
+  state.sourceLibraryRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => ({ ...(row || {}), id: String(row?.id || "").trim() }))
+    .filter((row) => row.id);
+  state.sourceLibraryCandidateElectionId = String(candidateElectionId || "").trim();
+
+  const rowEls = Array.from(dom.sourceRowsContainer?.querySelectorAll("[data-source-row]") || []);
+  rowEls.forEach((rowEl) => {
+    populateSourceLibrarySelect(rowEl);
+    applySourceEntryMode(rowEl);
+  });
+  refreshSourceRowsUI();
+}
+
+async function loadSourceLibraryForCandidateElection(candidateElectionId) {
+  const normalizedCandidateElectionId = String(candidateElectionId || "").trim();
+  if (!normalizedCandidateElectionId) {
+    setSourceLibraryRows([], "");
+    return;
+  }
+
+  const requestSeq = ++state.sourceLibraryRequestSeq;
+  try {
+    const response = await utils.apiGet(
+      `/api/pledges/source-library?candidate_election_id=${encodeURIComponent(normalizedCandidateElectionId)}`,
+    );
+    if (requestSeq !== state.sourceLibraryRequestSeq) return;
+    if (selectedCandidateElectionId() !== normalizedCandidateElectionId) return;
+    setSourceLibraryRows(response?.rows || [], normalizedCandidateElectionId);
+  } catch (_error) {
+    if (requestSeq !== state.sourceLibraryRequestSeq) return;
+    if (selectedCandidateElectionId() !== normalizedCandidateElectionId) return;
+    setSourceLibraryRows([], normalizedCandidateElectionId);
+  }
+}
+
 function addSourceRow(initial = {}) {
   if (!dom.sourceRowTemplate || !dom.sourceRowsContainer) return;
   const fragment = dom.sourceRowTemplate.content.cloneNode(true);
   const rowEl = fragment.querySelector("[data-source-row]");
+  state.sourceRowSequence += 1;
+  const entryModeGroupName = `source-entry-mode-${state.sourceRowSequence}`;
+  const entryModeInputs = Array.from(rowEl.querySelectorAll("[data-source-entry-mode]"));
+  entryModeInputs.forEach((inputEl) => {
+    inputEl.name = entryModeGroupName;
+  });
 
   rowEl.querySelector("[data-source-title]").value = String(initial.title || "");
   rowEl.querySelector("[data-source-url]").value = String(initial.url || "");
@@ -440,6 +568,15 @@ function addSourceRow(initial = {}) {
   rowEl.querySelector("[data-source-published-at]").value = String(initial.published_at || "");
   rowEl.querySelector("[data-source-summary]").value = String(initial.summary || "");
   rowEl.querySelector("[data-source-note]").value = String(initial.note || "");
+  rowEl.querySelector("[data-source-existing-id]").value = String(initial.source_id || "");
+
+  const sourceEntryMode = String(initial.source_id || "").trim() ? "existing" : "new";
+  entryModeInputs.forEach((inputEl) => {
+    inputEl.checked = inputEl.value === sourceEntryMode;
+  });
+
+  populateSourceLibrarySelect(rowEl, initial.source_id);
+  applySourceEntryMode(rowEl);
 
   dom.sourceRowsContainer.appendChild(fragment);
   refreshSourceRowsUI();
@@ -447,6 +584,15 @@ function addSourceRow(initial = {}) {
 }
 
 function sourceMetaTextFromRow(rowEl) {
+  if (getSourceEntryMode(rowEl) === "existing") {
+    const selectEl = rowEl.querySelector("[data-source-existing-id]");
+    const selectedId = String(selectEl?.value || "").trim();
+    if (!selectedId) return "기존 자료를 선택해 주세요";
+    const selectedRow = sourceLibraryRows().find((row) => String(row?.id || "").trim() === selectedId);
+    const selectedLabel = selectedRow ? sourceLibraryOptionLabel(selectedRow) : String(selectEl?.selectedOptions?.[0]?.textContent || "").trim();
+    return selectedLabel ? `[기존] ${selectedLabel}` : "기존 자료를 선택해 주세요";
+  }
+
   const title = String(rowEl.querySelector("[data-source-title]")?.value || "").trim();
   const urlRaw = String(rowEl.querySelector("[data-source-url]")?.value || "").trim();
   if (title) return title;
@@ -530,6 +676,8 @@ function collectSourcesPayload(parsedModel) {
   const payloadRows = [];
 
   rows.forEach((rowEl, rowIndex) => {
+    const sourceEntryMode = getSourceEntryMode(rowEl);
+    const sourceId = String(rowEl.querySelector("[data-source-existing-id]")?.value || "").trim();
     const title = String(rowEl.querySelector("[data-source-title]")?.value || "").trim();
     const urlRaw = String(rowEl.querySelector("[data-source-url]")?.value || "").trim();
     const sourceType = String(rowEl.querySelector("[data-source-type]")?.value || "").trim();
@@ -539,6 +687,29 @@ function collectSourcesPayload(parsedModel) {
     const summary = String(rowEl.querySelector("[data-source-summary]")?.value || "").trim();
     const note = String(rowEl.querySelector("[data-source-note]")?.value || "").trim();
     const targetPath = String(rowEl.querySelector("[data-source-target-path]")?.value || "").trim();
+    const linkScope = mode === "advanced" ? "goal" : "pledge";
+
+    if (sourceEntryMode === "existing") {
+      const hasAny = [sourceId, note, targetPath].some(Boolean);
+      if (!hasAny) return;
+
+      if (!sourceId) {
+        throw new Error(`출처 ${rowIndex + 1}: 기존 자료를 선택해 주세요.`);
+      }
+
+      if (mode === "advanced" && !targetPath) {
+        throw new Error(`출처 ${rowIndex + 1}: 연결 항목을 선택해 주세요.`);
+      }
+
+      payloadRows.push({
+        source_id: sourceId,
+        source_role: sourceRole,
+        note: note || "",
+        link_scope: linkScope,
+        target_path: mode === "advanced" ? targetPath : "",
+      });
+      return;
+    }
 
     const hasAny = [title, urlRaw, sourceType, publisher, publishedAt, summary, note, targetPath].some(Boolean);
     if (!hasAny) return;
@@ -565,7 +736,7 @@ function collectSourcesPayload(parsedModel) {
       published_at: publishedAt || "",
       summary: summary || "",
       note: note || "",
-      link_scope: mode === "advanced" ? "goal" : "pledge",
+      link_scope: linkScope,
       target_path: mode === "advanced" ? targetPath : "",
     });
   });
@@ -759,6 +930,23 @@ function bindSourceEvents() {
     refreshSourceRowsUI();
   });
 
+  dom.sourceRowsContainer?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.closest("[data-source-entry-mode]")) {
+      const rowEl = target.closest("[data-source-row]");
+      if (!rowEl) return;
+      applySourceEntryMode(rowEl);
+      refreshSourceRowsUI();
+      return;
+    }
+
+    if (target.closest("[data-source-existing-id]")) {
+      refreshSourceRowsUI();
+    }
+  });
+
   dom.sourceQuickList?.addEventListener("click", (event) => {
     const jumpBtn = event.target.closest("[data-action='jump-source-row']");
     if (!jumpBtn) return;
@@ -822,8 +1010,6 @@ function bindParseSaveEvents() {
         status: "active",
         parse_type: parsedModel.parse_type,
         structure_version: parsedModel.structure_version,
-        timeline_text: parsedModel.timeline_text || null,
-        finance_text: parsedModel.finance_text || null,
         sources,
       };
 

@@ -18,6 +18,8 @@ _SECTION_LABELS = {
 
 _GOAL_SECTION_TITLE = "목표"
 _METHOD_SECTION_TITLE = "이행 방법"
+_TIMELINE_SECTION_TITLE = "\uc774\ud589\uae30\uac04"
+_FINANCE_SECTION_TITLE = "\uc7ac\uc6d0\uc870\ub2ec\ubc29\uc548 \ub4f1"
 
 
 def _clean_text(value):
@@ -62,7 +64,8 @@ def _strip_marker(trimmed_line):
 
 
 def _normalize_section_header(line):
-    compact = _collapse_spaces(line)
+    compact = _collapse_spaces(line).lstrip("\ufeff")
+    compact = re.sub(r"^[□○◯]+", "", compact)
     return re.sub(r"[\[\]\(\):：\-]", "", compact)
 
 
@@ -202,6 +205,8 @@ def _build_tree_nodes(parsed):
 
     goals = parsed.get("goals") or []
     strategies = parsed.get("strategies") or []
+    timeline_items = parsed.get("timeline") or []
+    finance_items = parsed.get("finance") or []
 
     if goals:
         goal_root_index = _append_node(
@@ -240,6 +245,36 @@ def _build_tree_nodes(parsed):
                     parent_index=strategy_index,
                 )
 
+    if timeline_items:
+        timeline_root_index = _append_node(
+            node_type="goal",
+            level=1,
+            content=_TIMELINE_SECTION_TITLE,
+            parent_index=None,
+        )
+        for timeline_line in timeline_items:
+            _append_node(
+                node_type="strategy",
+                level=2,
+                content=timeline_line,
+                parent_index=timeline_root_index,
+            )
+
+    if finance_items:
+        finance_root_index = _append_node(
+            node_type="goal",
+            level=1,
+            content=_FINANCE_SECTION_TITLE,
+            parent_index=None,
+        )
+        for finance_line in finance_items:
+            _append_node(
+                node_type="strategy",
+                level=2,
+                content=finance_line,
+                parent_index=finance_root_index,
+            )
+
     return nodes
 
 
@@ -265,6 +300,20 @@ def _parse_pledges_text(text):
                     }
                     for strategy in parsed["strategies"]
                 ],
+            }
+        )
+    if parsed.get("timeline"):
+        goals.append(
+            {
+                "title": _TIMELINE_SECTION_TITLE,
+                "promises": [{"title": item, "items": []} for item in parsed["timeline"]],
+            }
+        )
+    if parsed.get("finance"):
+        goals.append(
+            {
+                "title": _FINANCE_SECTION_TITLE,
+                "promises": [{"title": item, "items": []} for item in parsed["finance"]],
             }
         )
     return goals
@@ -618,7 +667,6 @@ def insert_pledge_tree(
                 "content": node_content,
                 "sort_order": next_sort_order,
                 "parent_id": parent_id,
-                "is_leaf": not bool(node.get("has_child")),
                 "created_at": now,
                 "created_by": created_by,
                 "updated_at": now,
@@ -657,4 +705,3 @@ def insert_node_source_row(
         payload=payload,
         optional_fields=optional_fields or {"created_at", "created_by", "updated_at", "updated_by"},
     )
-
